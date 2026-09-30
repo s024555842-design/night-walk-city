@@ -103,6 +103,28 @@ body.coarse .touch{display:block}
 .tb.wpn{right:132px;bottom:150px;width:52px;height:52px;font-size:12px}
 .tb.use{right:158px;bottom:84px;width:62px;height:62px;background:rgba(255,181,71,.9);border-color:transparent;color:#2a1a00;font-size:12px}
 .tb.rel{right:190px;bottom:150px;width:52px;height:52px;font-size:12px}
+/* driving pad: arrow buttons replace the joystick while in a vehicle */
+.dpad{display:none}
+body.coarse.driving .dpad{display:block}
+body.coarse.driving .stick{display:none}
+.db{position:absolute;pointer-events:auto;touch-action:none;width:80px;height:80px;border-radius:18px;border:1.5px solid rgba(255,255,255,.35);background:rgba(10,12,20,.5);color:#fff;display:grid;place-items:center;text-shadow:none;-webkit-user-select:none;user-select:none}
+.db svg{width:34px;height:34px}
+.db.on{background:rgba(255,255,255,.85);color:#111}
+.db.l{left:18px;bottom:calc(env(safe-area-inset-bottom,0px) + 24px)}
+.db.r{left:110px;bottom:calc(env(safe-area-inset-bottom,0px) + 24px)}
+.db.u{right:18px;bottom:calc(env(safe-area-inset-bottom,0px) + 112px);background:rgba(52,168,83,.55)}
+.db.d{right:18px;bottom:calc(env(safe-area-inset-bottom,0px) + 24px);background:rgba(224,64,79,.45)}
+.db.u.on{background:#6fd08c;color:#0b2a12}.db.d.on{background:#ff8c96;color:#3a0a10}
+.db small{position:absolute;bottom:5px;left:0;right:0;text-align:center;font:700 10px var(--f-body);opacity:.85}
+body.coarse.driving .tb.run,body.coarse.driving .tb.use,body.coarse.driving .tb.rel{display:none}
+body.coarse.driving .tbtns{right:112px}
+body.coarse.driving .tb.big{width:70px;height:70px;right:0;bottom:6px}
+body.coarse.driving .tb.jump{right:0;bottom:92px;width:62px;height:62px}
+body.coarse.driving .tb.ctx{right:84px;bottom:8px}
+body.coarse.driving .tb.wpn{right:84px;bottom:96px}
+body.coarse.driving .speedo{bottom:auto;top:calc(env(safe-area-inset-top,0px) + 108px)}
+body.coarse.driving .speedo b{font-size:30px}
+body.coarse.driving .subs{bottom:calc(env(safe-area-inset-bottom,0px) + 120px)}
 .pclose{position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);right:14px;height:36px;padding:0 14px;border-radius:18px;border:1px solid rgba(255,255,255,.3);background:rgba(10,12,20,.75);color:#fff;font:700 13px var(--f-body);pointer-events:auto;z-index:2}
 .topbtns{position:absolute;left:12px;top:calc(env(safe-area-inset-top,0px) + 10px);display:flex;gap:8px;pointer-events:auto}
 .topbtns button{height:36px;padding:0 12px;border-radius:18px;border:1px solid rgba(255,255,255,.25);background:rgba(10,12,20,.55);color:#fff;font:700 13px var(--f-body);position:relative}
@@ -334,6 +356,12 @@ body.coarse .tk-text{font-size:15px}
 
   <div class="touch" id="touch" hidden>
     <div class="stick" id="stick"><div class="knob" id="knob"></div></div>
+    <div class="dpad" id="dpad">
+      <button class="db l" id="dL" type="button" aria-label="左轉"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="db r" id="dR" type="button" aria-label="右轉"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="db u" id="dU" type="button" aria-label="油門"><svg viewBox="0 0 24 24"><path d="M5 15l7-7 7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg><small>油門</small></button>
+      <button class="db d" id="dD" type="button" aria-label="煞車／倒車"><svg viewBox="0 0 24 24"><path d="M5 9l7 7 7-7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg><small>煞車</small></button>
+    </div>
     <div class="tbtns">
       <button class="tb big" id="tAtk" type="button">攻擊</button>
       <button class="tb jump" id="tJump" type="button">跳</button>
@@ -402,7 +430,7 @@ body.coarse .tk-text{font-size:15px}
     <h3>步行</h3>
     <div class="ctrl"><span class="key">WASD</span>移動（手機：左下搖桿）<span class="key">Shift</span>衝刺（按住）<span class="key">Space</span>跳躍<span class="key">滑鼠</span>視角：拖曳，或點一下畫面鎖定游標（Esc 解除）<span class="key">左鍵</span>攻擊・開槍<span class="key">Tab</span>換武器（滾輪也可以）<span class="key">R</span>裝填子彈<span class="key">E</span>互動：商店、捷運、任務對話<span class="key">F</span>上車</div>
     <h3>駕駛・機車與汽車</h3>
-    <div class="ctrl"><span class="key">W / S</span>油門 / 煞車・倒車<span class="key">A / D</span>轉向<span class="key">Space</span>手煞車（甩尾）<span class="key">H</span>喇叭<span class="key">F</span>下車</div>
+    <div class="ctrl"><span class="key">W / S</span>油門 / 煞車・倒車（手機：右側 ▲▼）<span class="key">A / D</span>轉向（手機：左側 ◀▶）<span class="key">Space</span>手煞車（甩尾）<span class="key">H</span>喇叭<span class="key">F</span>下車</div>
     <h3>介面</h3>
     <div class="ctrl"><span class="key">T</span>手機（任務、捷運、郵件、影片、電話）<span class="key">M</span>大地圖，點一下設定導航<span class="key">Esc</span>選單・暫停</div>
     <p class="note">手機觸控：左下搖桿移動、在畫面右半邊拖曳轉視角、右下按鈕攻擊／跳躍／衝刺／上車。</p>
@@ -1148,6 +1176,13 @@ holdBtn('tWpn',()=>cycleWeapon());
 $('tRun').onclick=()=>{S.run=!S.run;$('tRun').setAttribute('aria-pressed',S.run)};
 $('tCtx').onclick=()=>{if(ctxAct)ctxAct.fn()};
 $('tRel').onclick=()=>reload();
+const pad={L:false,R:false,U:false,D:false};
+['L','R','U','D'].forEach(k=>{const b=$('d'+k);const ids=new Set();
+  const on=e=>{e.preventDefault();ids.add(e.pointerId);try{b.setPointerCapture(e.pointerId)}catch(_){}pad[k]=true;b.classList.add('on')};
+  const off=e=>{ids.delete(e.pointerId);if(!ids.size){pad[k]=false;b.classList.remove('on')}};
+  b.addEventListener('pointerdown',on);b.addEventListener('pointerup',off);b.addEventListener('pointercancel',off);b.addEventListener('lostpointercapture',off);
+  b.addEventListener('contextmenu',e=>e.preventDefault())});
+function padReset(){for(const k in pad){pad[k]=false;$('d'+k).classList.remove('on')}}
 $('tMenu').onclick=()=>openPause();$('tMap').onclick=()=>openMap();
 document.addEventListener('pointerlockchange',()=>{lockOn=document.pointerLockElement===canvas;$('cross').classList.toggle('free',!lockOn)});
 
@@ -1326,12 +1361,13 @@ function enterVehicle(n){
   S.veh=v;heroVel.x=heroVel.z=0;heroPos.y=0;grounded=true;
   heroHelmet.visible=v.type==='scooter';hero.hr.visible=v.type!=='scooter';
   $('speedo').hidden=false;$('area').classList.remove('on');
+  document.body.classList.add('driving');$('tJump').textContent='手煞';input.x=input.y=0;padReset();
   onEnterVehicle(v);
 }
 function exitVehicle(){
   const v=S.veh;if(!v)return;
   if(Math.abs(v.fwd)>6){toast('太快了，先減速再下車','info',1400);return}
-  v.vx=v.vz=v.fwd=0;S.veh=null;$('speedo').hidden=true;
+  v.vx=v.vz=v.fwd=0;S.veh=null;$('speedo').hidden=true;document.body.classList.remove('driving');$('tJump').textContent='跳';padReset();
   hero.g.visible=true;heroHelmet.visible=false;hero.hr.visible=true;
   heroYaw=v.h;heroPos.x=v.x+Math.cos(v.h)*(v.st.rad+.6);heroPos.z=v.z-Math.sin(v.h)*(v.st.rad+.6);snapWalk(heroPos);heroPos.y=0;
   v.g.rotation.z=0;
@@ -1571,7 +1607,7 @@ function respawnAt(type,why,fee){
     bigMsg(why,`在${p.name}醒來，付了 NT$${fmt(fee)}`,true,3000);streamChunks(heroPos,true);
   }),1200);
 }
-function exitVehicleForce(){const v=S.veh;if(!v)return;v.vx=v.vz=v.fwd=0;S.veh=null;$('speedo').hidden=true;hero.g.visible=true;heroHelmet.visible=false;hero.hr.visible=true;v.g.rotation.z=0}
+function exitVehicleForce(){const v=S.veh;if(!v)return;v.vx=v.vz=v.fwd=0;S.veh=null;$('speedo').hidden=true;document.body.classList.remove('driving');$('tJump').textContent='跳';padReset();hero.g.visible=true;heroHelmet.visible=false;hero.hr.visible=true;v.g.rotation.z=0}
 function die(){const fee=Math.min(S.cash,Math.round(S.cash*.1)+200);S.cash-=fee;renderMoney();bigMsg('送醫','',true,1400);respawnAt('hospital','送醫',fee)}
 function busted(){const fee=Math.min(S.cash,Math.round(S.cash*.2)+300);S.cash-=fee;renderMoney();S.bust=0;bigMsg('被捕','',true,1400);respawnAt('police','被捕',fee)}
 
@@ -2415,6 +2451,7 @@ function frame(now){
   if(!S.started){camYaw+=dt*.03;updateCamera(dt);updateEnv(dt*.2);updateLights(dt);updateTraffic(dt);updatePeds(dt,now);streamChunks(heroPos);cullChunks();renderPeople();renderer.render(scene,camera);requestAnimationFrame(frame);return}
   if(!S.paused){
     let ix=input.x,iy=input.y;
+    if(S.veh){ix+=(pad.R?1:0)-(pad.L?1:0);iy+=(pad.U?1:0)-(pad.D?1:0)}
     if(keys['a']||keys['arrowleft'])ix-=1;if(keys['d']||keys['arrowright'])ix+=1;if(keys['w']||keys['arrowup'])iy+=1;if(keys['s']||keys['arrowdown'])iy-=1;
     const il=Math.hypot(ix,iy);if(il>1){ix/=il;iy/=il}
     if(S.dead){ix=iy=0}
