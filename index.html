@@ -123,6 +123,14 @@ body.coarse .tr{top:calc(env(safe-area-inset-top,0px) + 10px)}
 body.coarse .money{font-size:24px}
 body.coarse #toast{top:calc(env(safe-area-inset-top,0px) + 120px)}
 
+/* ---------- dialogue ---------- */
+.talk{z-index:18;position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);transform:translateX(-50%);width:min(660px,calc(100% - 32px));background:rgba(10,12,20,.94);border:1px solid var(--line);border-radius:14px;padding:14px 16px 12px;pointer-events:auto;text-shadow:none}
+.tk-name{font:900 14px var(--f-body);letter-spacing:.08em;color:#ff8fd0;margin-bottom:4px}
+.tk-text{font:500 17px/1.6 var(--f-body);min-height:1.6em}
+.tk-ch{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.tk-ch .btn{min-width:0;padding:10px 14px}
+body.coarse .talk{bottom:calc(env(safe-area-inset-bottom,0px) + 10px)}
+body.coarse .tk-text{font-size:15px}
 /* ---------- panels ---------- */
 .overlay{z-index:10;position:absolute;inset:0;background:rgba(6,8,14,.72);display:grid;place-items:center;padding:16px;pointer-events:auto}
 .menu{width:min(420px,100%);display:grid;gap:10px}
@@ -337,6 +345,8 @@ body.coarse #toast{top:calc(env(safe-area-inset-top,0px) + 120px)}
     </div>
     <div class="topbtns"><button type="button" id="tMenu">選單</button><button type="button" id="tMap">地圖</button><button type="button" id="bPhone">手機<i class="badge" id="phoneBadge" hidden></i></button></div>
   </div>
+
+  <div class="talk" id="talk" hidden role="dialog" aria-label="對話"><div class="tk-name" id="tkName"></div><div class="tk-text" id="tkText" aria-live="polite"></div><div class="tk-ch" id="tkCh"></div></div>
 
   <div class="phone-wrap" id="phone" hidden>
     <button class="pclose" id="pClose" type="button">關閉手機</button>
@@ -1039,7 +1049,7 @@ function queueVehicles(list,player,playerVeh){
 const S={cash:500,pending:0,hp:100,st:100,wanted:0,heat:0,bust:0,weapon:'fist',owned:['fist'],mag:0,ammo:0,reload:0,kills:0,veh:null,
   mode:'free',dead:false,paused:true,started:false,clock:17*60+10,wx:{kind:'晴',temp:29,rain:0,next:600},story:0,done:0,picked:0,delivered:0,
   atkCd:0,swing:0,aim:0,gunHeat:0,lastHurt:0,pedHit:0,trust:100,steps:0,stepAcc:0,raw:0,rej:0,acc:6,outage:0,lastFix:0,gateStreak:0,real:false,spoof:false,spoofDir:{x:1,z:0},pdrBias:0,pdrScale:1,returning:false,
-  run:false,sens:1,invY:false,showHelp:true};
+  run:false,sens:1,invY:false,showHelp:true,items:{},npc:{}};
 const hero=person(0x2f6fd6,0xe2b48c,0x23283a,0x15120f);scene.add(hero.g);
 const heroHelmet=new THREE.Mesh(helmetG,M(0xf2f2f2));heroHelmet.position.y=2.3;heroHelmet.visible=false;hero.g.add(heroHelmet);
 const heroPos={x:START.x,y:0,z:START.z};const heroVel={x:0,z:0};let heroVy=0,grounded=true,heroYaw=Math.PI;
@@ -1073,7 +1083,7 @@ function fadeTo(fn){$('fade').classList.add('on');setTimeout(()=>{fn();setTimeou
 
 /* ================= input ================= */
 const keys={};const input={x:0,y:0};let jumpQ=false,lockOn=false;
-function anyModal(){return !$('pause').hidden||!$('bigmap').hidden||!$('sheetShop').hidden||!$('sheetSys').hidden||!$('sheetHelp').hidden||!$('sheetSet').hidden||!$('title').hidden}
+function anyModal(){return !$('talk').hidden||!$('pause').hidden||!$('bigmap').hidden||!$('sheetShop').hidden||!$('sheetSys').hidden||!$('sheetHelp').hidden||!$('sheetSet').hidden||!$('title').hidden}
 addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if(e.target&&e.target.tagName==='INPUT')return;
@@ -1083,6 +1093,7 @@ addEventListener('keydown',e=>{
   if(e.repeat)return;
   if(k==='escape'){onEscape();return}
   if(!$('bigmap').hidden){if(k==='m')closeMap();else if(k==='c')mapCenter();return}
+  if(!$('talk').hidden){talkKey(k);return}
   if(anyModal())return;
   if(k===' ')jumpQ=true;
   else if(k==='f')onCtxF();
@@ -1330,7 +1341,7 @@ function horn(){if(!S.veh)return;toast(S.veh.type==='car'?'叭——！':'叭叭
 let camShake=0;
 
 /* ================= camera ================= */
-const camTarget=new THREE.Vector3();
+const camTarget=new THREE.Vector3();let camLift=0;
 function updateCamera(dt){
   const v=S.veh;
   const want=(v?v.st.cam+Math.min(3,Math.abs(v.fwd)*.08):5.2)*(portrait?1.35:1);
@@ -1340,34 +1351,64 @@ function updateCamera(dt){
   camTarget.set(heroPos.x,ty,heroPos.z);
   const cp=Math.cos(camPitch),sp=Math.sin(camPitch);
   const dx=Math.sin(camYaw)*cp,dy=sp,dz=Math.cos(camYaw)*cp;
-  let d=camDist;
+  let d=camDist,hitWall=false;
   for(let s=.6;s<=camDist;s+=.35){const x=camTarget.x+dx*s,y=camTarget.y+dy*s,z=camTarget.z+dz*s;const g=Math.min(dGrid(x),dGrid(z));
-    if(!walkable(x,z)||(g>ARC-.3&&g<=WALK+.5&&y>3.3&&cellType(Math.floor(x/CELL),Math.floor(z/CELL))==='block')){d=Math.max(.9,s-.35);break}}
+    if(!walkable(x,z)||(g>ARC-.3&&g<=WALK+.5&&y>3.3&&cellType(Math.floor(x/CELL),Math.floor(z/CELL))==='block')){d=Math.max(2.4,s-.35);hitWall=true;break}}
   const sh=camShake>0?(Math.random()-.5)*camShake*.3:0;camShake=Math.max(0,camShake-dt);
-  camera.position.set(camTarget.x+dx*d+sh,Math.max(.5,camTarget.y+dy*d)+sh,camTarget.z+dz*d);
+  camLift+=((hitWall&&d<camDist-.5?1.6:0)-camLift)*Math.min(1,dt*4);
+  camera.position.set(camTarget.x+dx*d+sh,Math.max(.5,camTarget.y+dy*d+camLift)+sh,camTarget.z+dz*d);
   camera.lookAt(camTarget.x-dx*2,camTarget.y+(v?.3:.15)-dy*.5,camTarget.z-dz*2);
 }
 
 /* ================= weapons ================= */
 const WEAPONS={
-  fist:{id:'fist',name:'拳頭',dmg:12,range:2.3,cd:420},
-  bat:{id:'bat',name:'球棒',dmg:28,range:2.9,cd:600},
-  pistol:{id:'pistol',name:'手槍',dmg:24,range:40,cd:250,mag:12},
+  fist:{id:'fist',name:'拳頭',kind:'melee',dmg:12,range:2.3,cd:420},
+  bat:{id:'bat',name:'球棒',kind:'melee',dmg:28,range:2.9,cd:600},
+  sword:{id:'sword',name:'桃木劍',kind:'melee',dmg:36,range:3.2,cd:430,rare:true},
+  guitar:{id:'guitar',name:'木吉他',kind:'melee',dmg:48,range:3,cd:850,rare:true},
+  slipper:{id:'slipper',name:'藍白拖',kind:'throw',dmg:18,range:24,cd:520,rare:true},
+  pistol:{id:'pistol',name:'手槍',kind:'gun',dmg:24,range:40,cd:250,mag:12},
+  goldgun:{id:'goldgun',name:'金色手槍',kind:'gun',dmg:48,range:48,cd:330,mag:8,rare:true},
+};
+const WICON={
+  fist:'<path d="M7 11V7.5a1.5 1.5 0 013 0V10m0-2.5a1.5 1.5 0 013 0V10m0-1.5a1.5 1.5 0 013 0V13c0 3-2 5.5-5 5.5S6 16.5 6 14v-1.5a1.5 1.5 0 012-1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  bat:'<path d="M5 19l2 2 11-11c1.5-1.5 1.5-3.5 0-5s-3.5-1.5-5 0z" fill="currentColor"/>',
+  sword:'<path d="M4 20l3-3m-1.5-1.5l3 3M8 16L19 5l1-2-2 1L7 15z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>',
+  guitar:'<path d="M20 4l-6 6m-1.5-.5a3.5 3.5 0 00-4.9-.4 2.5 2.5 0 01-1.9 2.1 4 4 0 105.5 5.5 2.5 2.5 0 012.1-1.9 3.5 3.5 0 00-.8-5.3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="10" cy="14" r="1.4" fill="currentColor"/>',
+  slipper:'<path d="M9 3c3 0 5 3 5 7v8c0 2-1.5 3-3.5 3S7 20 7 18V8c0-3 .5-5 2-5z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 9h5.5" stroke="#6ab4ff" stroke-width="2.4"/>',
+  pistol:'<path d="M3 8h16v3h-5l-1 2h-2l-1 2.5L7 21H4l2-6.5L4 13H3z" fill="currentColor"/>',
+  goldgun:'<path d="M3 8h16v3h-5l-1 2h-2l-1 2.5L7 21H4l2-6.5L4 13H3z" fill="#ffd34d"/>',
 };
 const batMesh=new THREE.Mesh(CG(.05,.08,.95,8),M(0x9a6a3c));batMesh.position.set(0,-1.2,.05);hero.armR.add(batMesh);batMesh.visible=false;
+const swordMesh=new THREE.Mesh(BG(.08,1.1,.16),M(0xc98a4b));swordMesh.position.set(0,-1.3,.05);hero.armR.add(swordMesh);swordMesh.visible=false;
+const guitarMesh=new THREE.Group();{const b=new THREE.Mesh(BG(.14,.7,.5),M(0xa0612b));b.position.y=-1.6;const n=new THREE.Mesh(BG(.08,.8,.08),M(0x3b2414));n.position.y=-.95;guitarMesh.add(b,n)}hero.armR.add(guitarMesh);guitarMesh.visible=false;
+const slipperMesh=new THREE.Mesh(BG(.1,.42,.2),M(0x2c6fd6));slipperMesh.position.set(0,-1,.08);hero.armR.add(slipperMesh);slipperMesh.visible=false;
 const gunMesh=new THREE.Mesh(BG(.1,.34,.18),M(0x15161c));gunMesh.position.set(0,-.98,.08);hero.armR.add(gunMesh);gunMesh.visible=false;
+const goldMesh=new THREE.Mesh(BG(.1,.36,.2),new THREE.MeshLambertMaterial({color:0xffd34d,emissive:0x664400}));goldMesh.position.set(0,-.98,.08);hero.armR.add(goldMesh);goldMesh.visible=false;
 const flash=new THREE.PointLight(0xffd27a,0,12,2);scene.add(flash);
-function setWeapon(id){S.weapon=id;batMesh.visible=id==='bat';gunMesh.visible=id==='pistol';renderWeapon()}
-function renderWeapon(){const w=WEAPONS[S.weapon];$('wName').textContent=w.name;$('wAmmo').textContent=w.id==='pistol'?(S.reload>0?'裝填中':`${S.mag} / ${S.ammo}`):'';
-  $('cross').hidden=w.id!=='pistol'||S.dead;
-  $('wIcon').innerHTML=w.id==='fist'?'<path d="M7 11V7.5a1.5 1.5 0 013 0V10m0-2.5a1.5 1.5 0 013 0V10m0-1.5a1.5 1.5 0 013 0V13c0 3-2 5.5-5 5.5S6 16.5 6 14v-1.5a1.5 1.5 0 012-1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>'
-    :w.id==='bat'?'<path d="M5 19l2 2 11-11c1.5-1.5 1.5-3.5 0-5s-3.5-1.5-5 0z" fill="currentColor"/>'
-    :'<path d="M3 8h16v3h-5l-1 2h-2l-1 2.5L7 21H4l2-6.5L4 13H3z" fill="currentColor"/>'}
+const isGun=()=>WEAPONS[S.weapon].kind==='gun';
+function setWeapon(id){S.weapon=id;batMesh.visible=id==='bat';swordMesh.visible=id==='sword';guitarMesh.visible=id==='guitar';slipperMesh.visible=id==='slipper';gunMesh.visible=id==='pistol';goldMesh.visible=id==='goldgun';
+  const w=WEAPONS[id];if(w.kind==='gun')S.mag=Math.min(S.mag,w.mag);renderWeapon()}
+function giveWeapon(id,msg){if(!S.owned.includes(id))S.owned.push(id);setWeapon(id);bigMsg('獲得 '+WEAPONS[id].name,msg||'',false,2800)}
+function renderWeapon(){const w=WEAPONS[S.weapon];$('wName').textContent=w.name;$('wAmmo').textContent=w.kind==='gun'?(S.reload>0?'裝填中':`${S.mag} / ${S.ammo}`):w.kind==='throw'?'∞':'';
+  $('cross').hidden=w.kind==='melee'||S.dead;$('wIcon').innerHTML=WICON[w.id]}
 function cycleWeapon(dir=1){const o=S.owned;if(o.length<2)return;setWeapon(o[mod(o.indexOf(S.weapon)+dir,o.length)])}
-function reload(){if(S.weapon!=='pistol'||S.reload>0||S.mag>=12||S.ammo<=0)return;S.reload=1.1;renderWeapon()}
+function reload(){const w=WEAPONS[S.weapon];if(w.kind!=='gun'||S.reload>0||S.mag>=w.mag||S.ammo<=0)return;S.reload=1.1;renderWeapon()}
 const tracers=[];
 function tracer(a,b,col,ay=1.9,by=1.6){const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(a.x,ay,a.z),new THREE.Vector3(b.x,by,b.z)]);
   const l=new THREE.Line(g,new THREE.LineBasicMaterial({color:col||0xffe08a,transparent:true}));scene.add(l);tracers.push({l,t:.14})}
+/* thrown slippers fly as real objects */
+const projectiles=[];const slipG=BG(.28,.08,.62),slipM=M(0x2c6fd6);
+function throwAt(from,to,target,dmg){const m=new THREE.Mesh(slipG,slipM);scene.add(m);const d=Math.hypot(to.x-from.x,to.z-from.z);projectiles.push({m,a:{x:from.x,z:from.z},b:{x:to.x,z:to.z},t:0,dur:Math.max(.12,d/28),target,dmg})}
+function updateProjectiles(dt){
+  for(let i=projectiles.length-1;i>=0;i--){const p=projectiles[i];p.t+=dt/p.dur;const k=Math.min(1,p.t);
+    p.m.position.set(p.a.x+(p.b.x-p.a.x)*k,1.7+Math.sin(k*Math.PI)*1.2,p.a.z+(p.b.z-p.a.z)*k);p.m.rotation.set(p.t*14,p.t*9,0);
+    if(p.t>=1){scene.remove(p.m);projectiles.splice(i,1);
+      if(p.target&&p.target.hp!==undefined&&!p.target.dead){hurtEnemy(p.target,p.dmg,heroPos);toast('啪！','info',700)}
+      else if(p.target&&p.target.w!==undefined&&!p.target.down){say('路人',pick(['欸！誰丟拖鞋啦！','痛欸！','你媽沒教你不要亂丟東西嗎！']),1.8);p.target.panic=3}
+      dropSlipper(p.b)}}
+}
+function dropSlipper(){}
 function aimDir(){return {x:-Math.sin(camYaw),z:-Math.cos(camYaw)}}
 function findTarget(range,cone){
   const f=aimDir();let best=null,bs=1e9;
@@ -1375,28 +1416,33 @@ function findTarget(range,cone){
   enemies.forEach(e=>{if(!e.dead)test(e,'enemy')});
   return best;
 }
+function pedInLine(range,dot){const f=aimDir();return peds.concat(crowd).find(p=>!p.down&&(()=>{const dx=p.x-heroPos.x,dz=p.z-heroPos.z,d=Math.hypot(dx,dz);return d<range&&d>.5&&(dx*f.x+dz*f.z)/d>dot})())}
 function attack(){
   if(S.dead||S.paused)return;const now=performance.now();const w=WEAPONS[S.weapon];if(now<S.atkCd)return;
-  if(S.veh&&w.id!=='pistol'){toast('騎車開車時只能用手槍','info',1500);return}
-  if(w.id==='pistol'){
+  if(S.veh&&w.kind!=='gun'){toast('騎車開車時只能用槍','info',1500);return}
+  if(w.kind==='gun'){
     if(S.reload>0)return;
     if(S.mag<=0){if(S.ammo>0)reload();else{toast('沒子彈了，到武器行補貨','bad',1600);S.atkCd=now+400}return}
-    S.mag--;S.atkCd=now+w.cd;S.aim=.6;flash.intensity=3;flash.position.set(heroPos.x,2,heroPos.z);
+    S.mag--;S.atkCd=now+w.cd;S.aim=.6;flash.intensity=w.id==='goldgun'?5:3;flash.position.set(heroPos.x,2,heroPos.z);
     const tg=findTarget(w.range,.42);const f=aimDir();S.aimYaw=Math.atan2(f.x,f.z);
     let end;
-    if(tg){const hit=Math.random()<.85;end={x:tg.o.x+(hit?0:(Math.random()-.5)*3),z:tg.o.z+(hit?0:(Math.random()-.5)*3)};if(hit)hurtEnemy(tg.o,w.dmg,heroPos);S.aimYaw=Math.atan2(tg.o.x-heroPos.x,tg.o.z-heroPos.z)}
-    else{end={x:heroPos.x+f.x*30,z:heroPos.z+f.z*30};
-      const ped=peds.concat(crowd).find(p=>!p.down&&(()=>{const dx=p.x-heroPos.x,dz=p.z-heroPos.z,d=Math.hypot(dx,dz);return d<25&&(dx*f.x+dz*f.z)/d>.985})());
-      if(ped){knockPed(ped,now);end={x:ped.x,z:ped.z}}}
-    tracer(heroPos,end,null,S.veh?1.6:1.9);panicPeds(heroPos,45);
+    if(tg){const hit=Math.random()<(w.id==='goldgun'?.95:.85);end={x:tg.o.x+(hit?0:(Math.random()-.5)*3),z:tg.o.z+(hit?0:(Math.random()-.5)*3)};if(hit)hurtEnemy(tg.o,w.dmg,heroPos);S.aimYaw=Math.atan2(tg.o.x-heroPos.x,tg.o.z-heroPos.z)}
+    else{end={x:heroPos.x+f.x*30,z:heroPos.z+f.z*30};const ped=pedInLine(25,.985);if(ped){knockPed(ped,now);end={x:ped.x,z:ped.z}}}
+    tracer(heroPos,end,w.id==='goldgun'?0xffd34d:null,S.veh?1.6:1.9);panicPeds(heroPos,45);
     if(!S.wanted&&Math.random()<.4)addWanted(1,'槍聲，有人報警');
     else if(police.some(p=>hyp(p.w.pos,heroPos)<45)&&S.wanted<4&&now-S.gunHeat>6000){S.gunHeat=now;addWanted(1,'在警察面前開槍')}
     if(S.mag===0&&S.ammo>0)setTimeout(reload,250);
     renderWeapon();
+  }else if(w.kind==='throw'){
+    S.atkCd=now+w.cd;S.swing=.28;const f=aimDir();
+    const tg=findTarget(w.range,.5)||(()=>{let b=null,bd=15;enemies.forEach(e=>{if(!e.dead){const d=hyp(e,heroPos);if(d<bd){bd=d;b={o:e}}}});return b})();let end,target=null;
+    if(tg){end={x:tg.o.x,z:tg.o.z};target=tg.o}else{const ped=pedInLine(w.range,.97);if(ped){end={x:ped.x,z:ped.z};target=ped}else end={x:heroPos.x+f.x*16,z:heroPos.z+f.z*16}}
+    S.aimYaw=Math.atan2(end.x-heroPos.x,end.z-heroPos.z);
+    setTimeout(()=>throwAt(heroPos,end,target,w.dmg),110);
   }else{
     S.atkCd=now+w.cd;S.swing=.28;
     const tg=findTarget(w.range+.6,1.2)||(()=>{let b=null,bd=w.range+.6;enemies.forEach(e=>{if(!e.dead){const d=hyp(e,heroPos);if(d<bd){bd=d;b={o:e}}}});return b})();
-    if(tg){S.aimYaw=Math.atan2(tg.o.x-heroPos.x,tg.o.z-heroPos.z);setTimeout(()=>{if(!tg.o.dead&&hyp(tg.o,heroPos)<=w.range+.8)hurtEnemy(tg.o,w.dmg,heroPos)},120)}
+    if(tg){S.aimYaw=Math.atan2(tg.o.x-heroPos.x,tg.o.z-heroPos.z);setTimeout(()=>{if(!tg.o.dead&&hyp(tg.o,heroPos)<=w.range+.8){hurtEnemy(tg.o,w.dmg,heroPos);if(w.id==='guitar')toast('鏘——！','info',700)}},120)}
     else S.aimYaw=Math.atan2(-Math.sin(camYaw),-Math.cos(camYaw));
   }
 }
@@ -1511,6 +1557,7 @@ function updatePolice(dt,now){
 /* ================= health, death, arrest ================= */
 function hurtHero(n){
   if(S.dead)return;S.hp=Math.max(0,S.hp-n);S.lastHurt=performance.now();$('hurt').style.opacity=.9;
+  if(S.hp<=0&&S.items.amulet){S.items.amulet=0;S.hp=40;bigMsg('平安符發光了','你撐了下來，平安符碎了',false,2600);return}
   if(S.hp<=0)die();
 }
 function respawnAt(type,why,fee){
@@ -1686,19 +1733,20 @@ function openShop(p){
   if(p.type==='mrt'){
     const list=[];forPOIs(p.ix,p.iz,14,q=>{if(q.type==='mrt'&&q!==p)list.push(q)});
     list.sort((a,b)=>hyp(a,p)-hyp(b,p));
-    $('shopBody').innerHTML=`<p class="note" style="margin:0 0 6px">刷悠遊卡搭捷運，快速移動到城市另一頭。</p>`+list.slice(0,8).map((q,i)=>{const fare=20+Math.round(hyp(q,p)/150)*5;return `<div class="row"><div><b>${q.name}</b><div class="d">${districtAt(q.x,q.z).zh}・約 ${fmt(hyp(q,p))} m</div></div><button class="btn primary" type="button" data-go="${i}">NT$${fare}</button></div>`}).join('')||'<p class="note">附近沒有其他捷運站。</p>';
-    $('shopBody').querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{const q=list[+b.dataset.go];const fare=20+Math.round(hyp(q,p)/150)*5;if(S.wanted){toast('被通緝時進不了捷運站','bad');return}if(!pay(fare))return;closeSheets();resume();
+    $('shopBody').innerHTML=`<p class="note" style="margin:0 0 6px">刷悠遊卡搭捷運，快速移動到城市另一頭。</p>`+list.slice(0,8).map((q,i)=>{const fare=S.items.pass?0:20+Math.round(hyp(q,p)/150)*5;return `<div class="row"><div><b>${q.name}</b><div class="d">${districtAt(q.x,q.z).zh}・約 ${fmt(hyp(q,p))} m</div></div><button class="btn primary" type="button" data-go="${i}">${fare?'NT$'+fare:'月票・免費'}</button></div>`}).join('')||'<p class="note">附近沒有其他捷運站。</p>';
+    $('shopBody').querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{const q=list[+b.dataset.go];const fare=S.items.pass?0:20+Math.round(hyp(q,p)/150)*5;if(S.wanted){toast('被通緝時進不了捷運站','bad');return}if(fare&&!pay(fare))return;closeSheets();resume();
       fadeTo(()=>{heroPos.x=q.x;heroPos.z=q.z+1.2;heroVel.x=heroVel.z=0;truth.x=est.x=heroPos.x;truth.z=est.z=heroPos.z;est.cx=est.cz=0;srv.x=heroPos.x;srv.z=heroPos.z;srv.t=performance.now();streamChunks(heroPos,true);toast('抵達 '+q.name,'good')})});
   }else{
     const items=SHOPS[p.type]||[];
-    $('shopBody').innerHTML=items.map(it=>{const own=(it.id==='bat'||it.id==='pistol')&&S.owned.includes(it.id);const need=it.id==='ammo'&&!S.owned.includes('pistol');
-      return `<div class="row"><div><b>${it.name}</b><div class="d">${it.desc}</div></div><button class="btn ${own||need?'':'primary'}" type="button" data-buy="${it.id}" ${own||need?'disabled':''}>${own?'已擁有':need?'需先買手槍':'NT$'+it.price}</button></div>`}).join('')+`<p class="note">目前現金 NT$${fmt(S.cash)}</p>`;
+    $('shopBody').innerHTML=items.map(it=>{const own=(it.id==='bat'||it.id==='pistol')&&S.owned.includes(it.id);const need=it.id==='ammo'&&!S.owned.some(o=>WEAPONS[o].kind==='gun');
+      return `<div class="row"><div><b>${it.name}</b><div class="d">${it.desc}</div></div><button class="btn ${own||need?'':'primary'}" type="button" data-buy="${it.id}" ${own||need?'disabled':''}>${own?'已擁有':need?'需先買手槍':'NT$'+priceOf(it)}</button></div>`}).join('')+`<p class="note">目前現金 NT$${fmt(S.cash)}${S.items.vip?'・VIP 卡八折':''}</p>`;
     $('shopBody').querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>buy(p.type,b.dataset.buy));
   }
   $('sheetShop').hidden=false;S.paused=true;
 }
+function priceOf(it){return Math.round(it.price*(S.items.vip?.8:1))}
 function buy(type,id){
-  const it=SHOPS[type].find(s=>s.id===id);if(!pay(it.price))return;
+  const it=SHOPS[type].find(s=>s.id===id);if(!pay(priceOf(it)))return;
   if(id==='bat'||id==='pistol'){S.owned.push(id);if(id==='pistol'){S.mag=12}setWeapon(id)}
   else if(id==='ammo'){S.ammo+=24;renderWeapon()}
   else if(id==='egg')S.hp=Math.min(100,S.hp+20);else if(id==='rice')S.hp=Math.min(100,S.hp+40);else if(id==='bento'||id==='heal')S.hp=100;
@@ -1714,8 +1762,10 @@ function updateContext(){
     if(S.veh)c={label:'下車',fn:exitVehicle};
     else{const n=nearVehicle();if(n)c={label:n.t?(n.t.kind==='car'?'搶車':'搶機車'):n.v.type==='bike'?(n.v.rented?'騎 U-bike':'租 U-bike NT$10'):n.v.story?'騎上阿彬的機車':(n.v.type==='car'?'開車':'騎車'),fn:()=>enterVehicle(n)}}
     if(!S.veh){
+      const np=nearNPC();if(np)it={label:'交談・'+np.name,fn:()=>np.talk()};
       markers().forEach(mk=>{if(!it&&hyp(mk,heroPos)<4)it={label:'開始任務：'+mk.title,fn:()=>mk.side?missionEat(false):startStory()}});
       if(!it)forPOIs(Math.floor(heroPos.x/CELL),Math.floor(heroPos.z/CELL),1,p=>{if(!it&&SHOP_TYPES[p.type]&&hyp(p,heroPos)<5)it={label:SHOP_TYPES[p.type]+'・'+p.name,fn:()=>openShop(p)}});
+      if(!it){const pd=nearPed();if(pd)it={label:'搭話',fn:()=>chatPed(pd)}}
     }
   }
   ctxAct=c;interAct=it;
@@ -1724,7 +1774,7 @@ function updateContext(){
   const short=l=>l.length>6?l.slice(0,5)+'…':l;
   const tb=$('tCtx');tb.hidden=!c;if(c){tb.textContent=short(c.label);tb.onclick=()=>{c.fn();updateContext()}}
   const tu=$('tUse');tu.hidden=!it;if(it){tu.textContent=short(it.label.replace('開始任務：','任務：'));tu.onclick=()=>{it.fn();updateContext()}}
-  $('tRel').hidden=!(S.weapon==='pistol'&&S.mag<12&&S.ammo>0&&S.reload<=0);
+  $('tRel').hidden=!(isGun()&&S.mag<WEAPONS[S.weapon].mag&&S.ammo>0&&S.reload<=0);
 }
 const SHOP_TYPES={shop:'購買',gun:'購買',hospital:'治療',mrt:'搭捷運'};
 function onCtxF(){if(ctxAct)ctxAct.fn();updateContext()}
@@ -1863,6 +1913,7 @@ function drawMini(){
   const t=navTarget();
   if(t){const pts=routePts(heroPos,t);mg.strokeStyle=mission?'#ffc94a':'#b36bff';mg.lineWidth=5;mg.lineJoin='round';mg.beginPath();pts.forEach((p,i)=>i?mg.lineTo(p.x-ox,p.z-oz):mg.moveTo(p.x-ox,p.z-oz));mg.stroke()}
   forPOIs(cx,cz,3,p=>dot(p,5,POI_META[p.type].col,true));
+  NPCS.forEach(n=>{if(n.shown)dot(n,4.5,'#ff8fd0',true)});
   enemies.forEach(e=>{if(!e.dead)dot(e,3.2,'#ff4d5e')});
   police.forEach(p=>dot(p.w.pos,5,(performance.now()/250|0)%2?'#ff4d5e':'#4d8dff',true));
   markers().forEach(mk=>dot(mk,7,'#ffd24a',true));
@@ -1876,14 +1927,14 @@ function drawMini(){
 
 /* ================= big map ================= */
 const bm={cx:0,cz:0,zoom:.6,off:{}};const bmap=$('bmap'),bg=bmap.getContext('2d');
-const LEGEND=[['me','你的位置','#ffffff'],['wp','導航點','#b36bff'],['story','主線任務','#ffd24a'],['mrt','捷運站','#4fb3ff'],['shop','商店','#46e0a0'],['med','醫院・警察局','#ff9aa8'],['temple','廟宇','#ff6b4a'],['market','夜市','#ffb547'],['landmark','地標','#9fe7d8'],['ubike','U-bike','#ffae2b'],['safe','安全屋','#7fb6ff']];
+const LEGEND=[['me','你的位置','#ffffff'],['wp','導航點','#b36bff'],['story','主線任務','#ffd24a'],['mrt','捷運站','#4fb3ff'],['shop','商店','#46e0a0'],['med','醫院・警察局','#ff9aa8'],['temple','廟宇','#ff6b4a'],['market','夜市','#ffb547'],['landmark','地標','#9fe7d8'],['npc','人物','#ff8fd0'],['ubike','U-bike','#ffae2b'],['safe','安全屋','#7fb6ff']];
 const LCAT={mrt:'mrt',shop:'shop',gun:'shop',hospital:'med',police:'med',temple:'temple',market:'market',landmark:'landmark',ubike:'ubike',safe:'safe'};
 function openMap(){releaseLock();closePhone();closeSheets();$('bigmap').hidden=false;S.paused=true;bm.cx=heroPos.x;bm.cz=heroPos.z;renderLegend();drawBigMap()}
 function closeMap(){$('bigmap').hidden=true;resume()}
 function mapCenter(){bm.cx=heroPos.x;bm.cz=heroPos.z;drawBigMap()}
 function renderLegend(){
   const cnt={};forPOIs(Math.floor(heroPos.x/CELL),Math.floor(heroPos.z/CELL),16,p=>{const c=LCAT[p.type];cnt[c]=(cnt[c]||0)+1});
-  $('legend').innerHTML=LEGEND.map(([k,n,col])=>`<button class="lg${bm.off[k]?' off':''}" type="button" data-k="${k}"><i style="background:${col}"></i>${n}<span>${k==='me'||k==='wp'||k==='story'?'':(cnt[k]||0)}</span></button>`).join('');
+  $('legend').innerHTML=LEGEND.map(([k,n,col])=>`<button class="lg${bm.off[k]?' off':''}" type="button" data-k="${k}"><i style="background:${col}"></i>${n}<span>${k==='me'||k==='wp'||k==='story'?'':k==='npc'?NPCS.filter(n=>n.shown).length:(cnt[k]||0)}</span></button>`).join('');
   $('legend').querySelectorAll('.lg').forEach(b=>b.onclick=()=>{bm.off[b.dataset.k]=!bm.off[b.dataset.k];renderLegend();drawBigMap()});
 }
 function drawBigMap(){
@@ -1902,6 +1953,7 @@ function drawBigMap(){
     const r=p.type==='landmark'?13:p.type==='market'||p.type==='temple'?10:8;g.fillStyle=m.col;g.beginPath();g.arc(tx(p.x),ty(p.z),r,0,6.283);g.fill();g.strokeStyle='#0c0f18';g.lineWidth=2;g.stroke();
     g.fillStyle='#0c0f18';g.font=`900 ${m.ch.length>1?9:11}px "Noto Sans TC",sans-serif`;g.fillText(m.ch,tx(p.x),ty(p.z)+.5);
     if(z>.9||p.type==='market'||p.type==='landmark'||p.type==='mrt'){g.fillStyle='#e8ecf6';g.font='600 11px "Noto Sans TC",sans-serif';g.fillText(p.name,tx(p.x),ty(p.z)-r-8)}}
+  if(!bm.off.npc)NPCS.forEach(n=>{if(n.shown){g.fillStyle='#ff8fd0';g.beginPath();g.arc(tx(n.x),ty(n.z),8,0,6.283);g.fill();g.strokeStyle='#0c0f18';g.lineWidth=2;g.stroke();g.fillStyle='#0c0f18';g.font='900 10px "Noto Sans TC",sans-serif';g.fillText(n.quest()?'!':'人',tx(n.x),ty(n.z)+.5);if(bm.zoom>.5){g.fillStyle='#ffd6ee';g.font='600 11px "Noto Sans TC",sans-serif';g.fillText(n.name,tx(n.x),ty(n.z)-16)}}});
   if(!bm.off.story)markers().forEach(mk=>{g.fillStyle='#ffd24a';g.beginPath();g.arc(tx(mk.x),ty(mk.z),11,0,6.283);g.fill();g.fillStyle='#111';g.font='900 12px sans-serif';g.fillText('M',tx(mk.x),ty(mk.z)+.5)});
   if(nt&&!bm.off.wp){g.fillStyle=mission?'#ffc94a':'#b36bff';g.beginPath();g.moveTo(tx(nt.x),ty(nt.z));g.arc(tx(nt.x),ty(nt.z)-14,8,Math.PI*.8,Math.PI*2.2);g.closePath();g.fill()}
   if(!bm.off.me){g.save();g.translate(tx(heroPos.x),ty(heroPos.z));g.rotate(Math.PI-(S.veh?S.veh.h:heroYaw));g.fillStyle='#fff';g.strokeStyle='#111';g.lineWidth=2;g.beginPath();g.moveTo(0,-12);g.lineTo(8,9);g.lineTo(0,4);g.lineTo(-8,9);g.closePath();g.fill();g.stroke();g.restore()}
@@ -1924,9 +1976,10 @@ function drawBigMap(){
 /* ================= menus ================= */
 function releaseLock(){if(document.pointerLockElement)try{document.exitPointerLock()}catch(e){}}
 function closeSheets(){['sheetShop','sheetSys','sheetHelp','sheetSet'].forEach(id=>$(id).hidden=true)}
-function resume(){if(!$('title').hidden)return;S.paused=!$('pause').hidden||!$('bigmap').hidden||!$('sheetShop').hidden||!$('sheetSys').hidden||!$('sheetHelp').hidden||!$('sheetSet').hidden}
+function resume(){if(!$('title').hidden)return;S.paused=!$('talk').hidden||!$('pause').hidden||!$('bigmap').hidden||!$('sheetShop').hidden||!$('sheetSys').hidden||!$('sheetHelp').hidden||!$('sheetSet').hidden}
 function openPause(){releaseLock();closePhone();$('pause').hidden=false;S.paused=true;$('mResume').focus()}
 function onEscape(){
+  if(!$('talk').hidden){endTalk();return}
   if(!phoneEl.hidden){if(app)goHome();else closePhone();return}
   if(!$('bigmap').hidden){closeMap();return}
   const open=['sheetShop','sheetSys','sheetHelp','sheetSet'].find(id=>!$(id).hidden);if(open){$(open).hidden=true;resume();return}
@@ -1953,6 +2006,181 @@ const TIPS=['按 M 打開地圖，點一下就能設定導航。','走到機車�
 $('tipText').textContent=pick(TIPS);
 
 
+/* ================= dialogue box ================= */
+let talkQ=[],talkChoices=null,talkNpc=null;
+function dialog(npc,lines,choices){
+  releaseLock();talkNpc=npc;talkQ=lines.slice();talkChoices=choices||null;
+  $('talk').hidden=false;$('subs').style.visibility='hidden';S.paused=true;nextLine();
+}
+function nextLine(){
+  const name=talkNpc?talkNpc.name:'';$('tkName').textContent=name;
+  const ch=$('tkCh');ch.innerHTML='';
+  if(talkQ.length){$('tkText').textContent=talkQ.shift();
+    if(talkQ.length||talkChoices){addBtn('繼續 ▸',nextLine,true)}else addBtn('再見',endTalk,true);return}
+  if(talkChoices){const cs=talkChoices;talkChoices=null;cs.forEach(([label,fn],i)=>addBtn(`${i+1}. ${label}`,()=>fn()));if(!cs.some(c=>c[0]==='再見'))addBtn('再見',endTalk)}
+  else endTalk();
+}
+function addBtn(label,fn,primary){const b=document.createElement('button');b.type='button';b.className='btn'+(primary?' primary':'');b.textContent=label;b.onclick=fn;$('tkCh').appendChild(b);if(primary)setTimeout(()=>b.focus(),0)}
+function endTalk(){$('talk').hidden=true;$('subs').style.visibility='';talkNpc=null;talkQ=[];talkChoices=null;resume();updateContext()}
+function talkKey(k){const bs=[...$('tkCh').querySelectorAll('button')];if(k==='e'||k==='enter'||k===' '){if(bs[0]&&bs[0].classList.contains('primary'))bs[0].click()}else if(/^[1-9]$/.test(k)){const b=bs.find(x=>x.textContent.startsWith(k+'.'));if(b)b.click()}}
+/* a reply inside an ongoing conversation */
+function reply(lines,choices){talkQ=lines.slice();talkChoices=choices||null;nextLine()}
+function giveItem(key,name,desc){S.items[key]=1;bigMsg('獲得 '+name,desc,false,3000);addMail('系統','獲得道具：'+name,desc)}
+
+/* ================= named NPCs ================= */
+const NPCS=[];
+function hourNow(){return (S.clock/60)%24}
+function makeNPC(def){
+  const m=person(def.shirt,def.skin||0xe2b48c,def.pants||0x2b3148,def.hair||0x1a1714);scene.add(m.g);
+  if(def.extra)def.extra(m);
+  const n={...def,m,x:def.at().x,z:def.at().z,yaw:def.yaw||0,shown:false,lb:null,lbKey:'',t:Math.random()*6};
+  n.talk=()=>def.talk(n);n.quest=()=>def.quest?def.quest(n):false;NPCS.push(n);return n;
+}
+function nearNPC(){let b=null,bd=3.2;NPCS.forEach(n=>{if(n.shown){const d=hyp(n,heroPos);if(d<bd){bd=d;b=n}}});return b}
+function updateNPCs(dt,now){
+  NPCS.forEach(n=>{
+    const p=n.at();n.x=p.x;n.z=p.z;
+    const vis=(n.when?n.when():true)&&hyp(n,heroPos)<160;
+    n.shown=vis;n.m.g.visible=vis;if(n.lb)n.lb.visible=vis&&hyp(n,heroPos)<60;if(!vis)return;
+    n.t+=dt;const d=hyp(n,heroPos);
+    const face=d<8?Math.atan2(heroPos.x-n.x,heroPos.z-n.z):n.yaw;n.m.g.rotation.y+=angDiff(face,n.m.g.rotation.y)*Math.min(1,dt*5);
+    n.m.g.position.set(n.x,0,n.z);n.m.body.position.y=1.5+Math.sin(n.t*2)*.02;
+    if(n.idle)n.idle(n,dt);
+    const key=n.name+(n.quest()?'　！':'');
+    if(key!==n.lbKey){n.lbKey=key;if(n.lb)scene.remove(n.lb);n.lb=label(key,n.quest()?'#ffd24a':'#ffd6ee',256);n.lb.scale.set(3.4,.85,1);scene.add(n.lb)}
+    n.lb.position.set(n.x,2.95,n.z);
+  });
+}
+const NS=S.npc;
+const cnt=k=>NS[k]=(NS[k]||0)+1;
+
+/* 阿嬤・早餐店 */
+makeNPC({id:'ama',name:'阿嬤',shirt:0x8a5a9e,pants:0x3a3f52,hair:0xd8d8d8,at:()=>({x:-15,z:8.6}),yaw:Math.PI,
+  extra:m=>{const s=new THREE.Mesh(BG(1.6,1,.8),M(0xc9a04a));s.position.set(1.6,.5,.2);m.g.add(s)},
+  quest:()=>!S.owned.includes('slipper')&&(NS.amaTalks||0)>=2,
+  talk(n){
+    const c=cnt('amaTalks');
+    const buy=['買蛋餅 NT$35',()=>{if(pay(35)){S.hp=Math.min(100,S.hp+40);reply(['來，剛煎好的，小心燙。'])}}];
+    if(c>=3&&!S.owned.includes('slipper')){dialog(n,['又來了喔？阿嬤看你很順眼。','這個給你，阿嬤以前拿它丟你爸，百發百中。','壞人追你，就用這個丟他！'],null);S.npcAfter=()=>giveWeapon('slipper','阿嬤的藍白拖：可以丟出去，無限使用');talkChoices=[['謝謝阿嬤',()=>{endTalk();S.npcAfter()}]];return}
+    const lines=[['少年仔，吃早餐了沒？阿嬤的蛋餅很好吃喔。'],['你是阿彬的表弟喔？小時候常常來這裡偷吃肉鬆。'],['現在的年輕人都在看手機，走路要看路啦！'],['藍白拖用得還習慣嗎？阿嬤那雙還在店裡。'],['下雨天記得走騎樓，不要淋到感冒。']];
+    dialog(n,lines[Math.min(c-1,lines.length-1)+(c>3?Math.floor(Math.random()*2):0)]||lines[0],[buy]);
+  }});
+
+/* 阿哲・街頭藝人 */
+makeNPC({id:'busker',name:'街頭藝人 阿哲',shirt:0x2f3440,pants:0x1d1f2a,hair:0x3a2a1e,at:()=>({x:52,z:52.5}),yaw:-Math.PI*.75,
+  extra:m=>{const g=new THREE.Group();const b=new THREE.Mesh(BG(.55,.7,.18),M(0xa0612b));b.position.set(0,0,0);const nk=new THREE.Mesh(BG(.1,.9,.08),M(0x3b2414));nk.position.set(.45,.35,0);nk.rotation.z=-1.1;g.add(b,nk);g.position.set(.1,1.35,.35);m.g.add(g);m.guitar=g;
+    const hat=new THREE.Mesh(CG(.35,.4,.12,10),M(0x1d1f26));hat.position.set(-.9,.06,.6);m.g.add(hat)},
+  idle:(n)=>{n.m.armR.rotation.x=-.9+Math.sin(n.t*9)*.25;n.m.armL.rotation.x=-.7},
+  quest:()=>!S.owned.includes('guitar'),
+  talk(n){
+    if(S.owned.includes('guitar'))return dialog(n,[pick(['那把吉他還好用嗎？別拿它砸我就好。','我今天寫了新歌，叫〈騎樓下的雨〉。','謝謝你一直來聽，我快可以去小巨蛋開唱了！'])]);
+    dialog(n,['嘿，要不要點歌？投個錢，我就唱給你聽。'],[['投 NT$100',()=>{if(!pay(100))return;const t=cnt('tips');
+      if(t>=3){reply(['你是我今天……不，是這個月最好的聽眾。','這把舊吉他陪我唱了十年，送你。','聽說砸人很痛，但請你只砸壞人。'],[['收下吉他',()=>{endTalk();giveWeapon('guitar','阿哲的木吉他：近戰傷害最高')}]])}
+      else reply([`（阿哲彈起自己寫的〈${pick(['夜行的臺北','捷運末班車','夜市的燈','雨中的101'])}〉，路人都停下來聽）`,`謝啦！這是第 ${t} 首，再來我就要拿出壓箱寶了。`])}],['下次吧',endTalk]]);
+  }});
+
+/* 廟公・廟宇 */
+let cat=null;
+makeNPC({id:'miaogong',name:'廟公 清伯',shirt:0xd9a441,pants:0x3a3f52,hair:0x8a8a8a,at:()=>({x:-100,z:73}),yaw:0,
+  quest:()=>!NS.catDone&&!(mission&&mission.id==='cat'),
+  talk(n){
+    const opts=[['求籤 NT$20',()=>{if(!pay(20))return;const now=S.clock;if(NS.lastLot&&now-NS.lastLot<60){reply(['一個時辰求一次就好，神明也要休息。']);return}NS.lastLot=now;
+      const r=Math.random();if(r<.2){S.cash+=520;renderMoney();reply(['……上上籤！','「財源廣進」，今天出門會撿到錢。','（你在香爐旁邊撿到 NT$520）'])}
+      else if(r<.5){S.hp=100;reply(['上籤。「身體健康，萬事如意」。','（你覺得精神好多了，生命全滿）'])}
+      else if(r<.85)reply(['中籤。「平安就是福」。','沒事就是好事。'])
+      else reply(['下籤……「今日騎車宜慢」。','年輕人，今天騎車小心點。'])}],
+      ['聊聊',()=>reply([pick(['這間廟有兩百多年了，比你阿公的阿公還老。','初一十五人最多，拜拜要排隊。','聽說半夜公園有個怪阿伯，我年輕時也見過他。','拜拜的時候要先報姓名跟地址，神明才找得到你。'])])]];
+    if(!NS.catDone&&!(mission&&mission.id==='cat'))opts.push(['有需要幫忙嗎？',()=>reply(['唉，廟裡的貓咪咪又跑出去了。','牠應該在附近的巷子裡，橘色的，很好認。','幫我把牠帶回來，好嗎？'],[['交給我',()=>{endTalk();startCatQuest(n)}],['等等再說',endTalk]])]);
+    if(mission&&mission.id==='cat'&&mission.stage==='back'&&hyp(n,heroPos)<5)return finishCat(n);
+    dialog(n,[NS.catDone?'年輕人，平安符有帶在身上吧？':'年輕人，來拜拜喔？'],opts);
+  }});
+function makeCat(){const g=new THREE.Group();const o=M(0xe8923a);const b=new THREE.Mesh(BG(.35,.3,.7),o);b.position.y=.3;const h=new THREE.Mesh(BG(.3,.28,.28),o);h.position.set(0,.5,.42);
+  const e1=new THREE.Mesh(BG(.08,.12,.05),o);e1.position.set(-.09,.7,.42);const e2=e1.clone();e2.position.x=.09;const t=new THREE.Mesh(BG(.06,.06,.45),o);t.position.set(0,.45,-.5);t.rotation.x=.7;g.add(b,h,e1,e2,t);scene.add(g);return g}
+function startCatQuest(n){
+  const p=randomDoor(n,160,300);cat={g:makeCat(),x:p.x,z:p.z,follow:false};cat.g.position.set(p.x,0,p.z);
+  beginMission({id:'cat',title:'找回咪咪',sub:'廟公的委託',stage:'find',
+    get target(){return this.stage==='find'?{x:cat.x,z:cat.z,name:'咪咪'}:{x:n.x,z:n.z,name:'廟公 清伯'}},
+    text(){return this.stage==='find'?`找到橘貓 <b>咪咪</b>・${fmt(hyp(cat,heroPos))} m`:`帶咪咪回去找 <b>廟公</b>・${fmt(hyp(n,heroPos))} m`},
+    update(dt){
+      if(this.stage==='find'){cat.g.rotation.y+=dt*.6;if(hyp(cat,heroPos)<2.6){this.stage='back';cat.follow=true;say('','喵～（咪咪蹭了蹭你的腳，願意跟你走了）',2.8)}}
+      else{const bx=heroPos.x-Math.sin(heroYaw)*1.4,bz=heroPos.z-Math.cos(heroYaw)*1.4;cat.x+=(bx-cat.x)*Math.min(1,dt*3);cat.z+=(bz-cat.z)*Math.min(1,dt*3);cat.g.position.set(cat.x,S.veh?.9:0,cat.z);cat.g.rotation.y=heroYaw;
+        if(hyp(n,heroPos)<3.2){finishCat(n);return}}
+      cat.g.position.x=cat.x;cat.g.position.z=cat.z;
+    }});
+  say('廟公','咪咪最喜歡躲在騎樓下的機車旁邊。',3);
+}
+function finishCat(n){
+  if(!mission||mission.id!=='cat')return;NS.catDone=1;scene.remove(cat.g);cat=null;completeMission(600,'咪咪回家了');
+  dialog(n,['咪咪！你跑去哪了……謝謝你，年輕人。','這個平安符你帶在身上，危險的時候會保佑你一次。','還有這把桃木劍，廟裡驅邪用的，借你用。'],[['收下',()=>{endTalk();giveItem('amulet','平安符','生命歸零時會自動回復 40 點，用一次就碎');setTimeout(()=>giveWeapon('sword','桃木劍：出手快、傷害高的近戰武器'),3000)}]]);
+}
+
+/* 阿龍・夜市雞排攤 */
+makeNPC({id:'chicken',name:'雞排攤 阿龍',shirt:0xf2f2f2,pants:0x2b3148,hair:0x111111,at:()=>({x:MARKET0.x-2,z:MARKET0.z-CELL/2+24.2}),yaw:Math.PI,
+  extra:m=>{const ap=new THREE.Mesh(BG(.82,.9,.05),M(0xc8102e));ap.position.set(0,1.25,.25);m.g.add(ap)},
+  quest:()=>!NS.chickenDone&&!mission,
+  talk(n){
+    const opts=[['買雞排 NT$80',()=>{if(pay(80)){S.hp=Math.min(100,S.hp+60);reply(['大雞排一塊，要切要辣？……都幫你加了啦！'])}}]];
+    if(!NS.chickenDone&&!mission)opts.push(['有需要幫忙嗎？',()=>reply(['你來得正好！101 下面有客人訂了二十塊雞排，我走不開。','三分鐘內送到，冷掉就不好吃了。給你一千！'],[['我去送',()=>{endTalk();chickenQuest(n)}],['太遠了',endTalk]])]);
+    dialog(n,[NS.chickenDone?'VIP 來了！今天要吃什麼？':pick(['大雞排剛起鍋，香喔！','夜市就是要吃雞排配珍奶啦。','你知道嗎？我的雞排比臉還大。'])],opts);
+  }});
+function chickenQuest(n){
+  const t={x:T101.ix*CELL+CELL/2,z:T101.iz*CELL+12,name:'臺北101 廣場'};
+  beginMission({id:'chicken',title:'雞排急送',sub:'三分鐘內送到 101',deadline:performance.now()+180000,
+    get target(){return t},text(){return `把雞排送到 <b>101 廣場</b>・${fmt(hyp(t,heroPos))} m`},
+    update(){if(hyp(t,heroPos)<(S.veh?7:4)){NS.chickenDone=1;completeMission(1000,'雞排還是熱的！');setTimeout(()=>{say('客人','哇，還是熱的！跟阿龍說我們下次還要訂。',3);giveItem('vip','夜市 VIP 卡','商店和武器行的東西都打八折')},1500)}
+      else if(performance.now()>this.deadline)failMission('雞排冷掉了，客人取消訂單')}});
+  say('阿龍','101 從這邊往東走，騎機車比較快！',3);
+}
+
+/* 林小姐・捷運站務員 */
+const MRT0=nearestPOI('mrt',START,12);
+if(MRT0)makeNPC({id:'mrt',name:'站務員 林小姐',shirt:0x2f6fb0,pants:0x1d1f2a,hair:0x2b1f18,at:()=>({x:MRT0.x-9,z:MRT0.z+.2}),yaw:Math.PI,
+  extra:m=>{const c=new THREE.Mesh(CG(.3,.32,.14,10),M(0x1f3a8a));c.position.y=2.55;m.g.add(c)},
+  quest:()=>!S.items.pass,
+  talk(n){
+    const opts=[['聊聊',()=>reply([pick(['搭捷運請先刷卡，站內禁止飲食喔。','手扶梯請靠右站，左邊留給趕時間的人。','末班車大概是半夜十二點，別錯過了。','博愛座要留給需要的人喔。'])])]];
+    if(!S.items.pass)opts.unshift(['我想挑戰！',()=>{if(NS.quizT&&S.clock-NS.quizT<60){reply(['剛剛答錯了，等一個小時再來挑戰吧。']);return}
+      reply(['好，考你一題：臺北101 有多高？'],[['508 公尺',()=>{reply(['答對了！','這張捷運月票送你，這個月搭捷運都免費。'],[['謝謝！',()=>{endTalk();giveItem('pass','捷運月票','搭捷運快速移動免費')}]])}],['438 公尺',()=>{NS.quizT=S.clock;reply(['差一點！那是別的大樓啦。下次再來挑戰。'])}],['101 公尺',()=>{NS.quizT=S.clock;reply(['……那是樓層數吧。下次再來。'])}]])}]);
+    dialog(n,[S.items.pass?'月票用得還順手嗎？':'你好！今天有「捷運知識王」活動，答對送月票喔。'],opts);
+  }});
+
+/* 陳警員・警察局 */
+const POL0=nearestPOI('police',START,14);
+if(POL0)makeNPC({id:'cop',name:'陳警員',shirt:0x2a3a6a,pants:0x1d1f2a,hair:0x111111,at:()=>({x:POL0.x+4,z:POL0.z}),yaw:Math.PI,
+  extra:m=>{const c=new THREE.Mesh(CG(.3,.32,.16,10),M(0x1d1f2a));c.position.y=2.55;m.g.add(c)},
+  talk(n){
+    if(S.wanted>0){dialog(n,['……等一下，你看起來很面熟。','喂！站住！'],null);talkChoices=[['快跑！',()=>{endTalk();addWanted(1,'被警察認出來')}]];return}
+    dialog(n,[pick(['騎車要戴安全帽，紅燈不要闖。','最近紅蠍幫很囂張，晚上少去他們的巷子。','聽說半夜的公園有個奇怪的阿伯，會送東西給答對謎題的人。','有事就打 110，不要自己處理。'])]);
+  }});
+
+/* 神秘阿伯・公園（只在晚上出現） */
+makeNPC({id:'oldman',name:'神秘的阿伯',shirt:0x3a3326,pants:0x2b2620,hair:0xbdbdbd,at:()=>({x:90,z:-150}),yaw:0,
+  when:()=>{const h=hourNow();return h>=20||h<5},
+  extra:m=>{const coat=new THREE.Mesh(BG(.9,1.4,.55),M(0x3a3326));coat.position.y=1.2;m.g.add(coat)},
+  quest:()=>!S.owned.includes('goldgun'),
+  talk(n){
+    if(S.owned.includes('goldgun'))return dialog(n,[pick(['……那把槍，好好用。','月亮很圓，適合散步。','你又來了。我什麼都沒有了。'])]);
+    if(NS.riddleT&&S.clock-NS.riddleT<120)return dialog(n,['……想好了再來。'],null);
+    dialog(n,['……年輕人，這麼晚了還不回家？','我有一個謎題。答對了，我有東西給你。','什麼東西，越洗越髒？'],[
+      ['衣服',()=>{NS.riddleT=S.clock;reply(['……不對。再想想。'])}],
+      ['水',()=>{reply(['……有意思。','這把槍跟了我三十年，現在是你的了。','子彈我也附上了。別讓我失望。'],[['收下',()=>{endTalk();S.ammo+=16;S.mag=8;giveWeapon('goldgun','金色手槍：傷害是手槍的兩倍，彈匣 8 發')}]])}],
+      ['碗',()=>{NS.riddleT=S.clock;reply(['……碗洗了會變乾淨。再想想。'])}]]);
+  }});
+
+/* ================= everyday chat with passers-by ================= */
+const CHAT_DAY=['今天好熱喔，要不要去喝杯手搖？','你知道最近的捷運站在哪嗎？……喔，手機地圖可以查喔。','聽說夜市的大胃王比賽很難。','我在等垃圾車，你也是嗎？','騎樓裡比較涼，走這邊啦。','下班了！今天要去吃滷肉飯。','欸你擋到我拍照了啦。','101 晚上的燈好漂亮。','紅蠍幫那邊的巷子不要亂走。','便利商店的茶葉蛋是人生的救贖。','我阿嬤在前面賣早餐，很好吃喔。','聽說有個街頭藝人唱得超好，就在路口。'];
+const CHAT_RAIN=['雨好大，傘借我一半好不好？','又下雨了……臺北就是這樣。','騎樓就是為了下雨天存在的。'];
+const CHAT_NIGHT=['這麼晚了還在外面喔？','宵夜要吃什麼好呢……','聽說半夜的公園有個奇怪的阿伯。'];
+function nearPed(){let b=null,bd=2.4;peds.concat(crowd).forEach(p=>{if(p.down||p.panic>0)return;const d=hyp(p,heroPos);if(d<bd){bd=d;b=p}});return b}
+function chatPed(p){
+  const h=hourNow();const pool=S.wx.rain>.3?CHAT_RAIN.concat(CHAT_DAY.slice(0,4)):(h>=20||h<5)?CHAT_NIGHT.concat(CHAT_DAY):CHAT_DAY;
+  if(p.w){p.w.speed=0;p.base0=p.base0||p.base;p.base=0;setTimeout(()=>{p.base=p.base0},3500)}else p.pause=3.5;
+  if(p.p&&p.p.g)p.p.g.rotation.y=Math.atan2(heroPos.x-p.x,heroPos.z-p.z);
+  say('路人',pick(pool),3);
+  if(Math.random()<.05&&!NS.pedGift){NS.pedGift=1;setTimeout(()=>{say('路人','……對了，這個我用不到，給你吧。',2.6);S.ammo+=12;renderWeapon();toast('路人給了你 12 發子彈','good')},3000)}
+}
+
+
 /* ================= in-game phone ================= */
 const phoneEl=$('phone'),pView=$('pView');
 let app=null;const AS={vid:0,vt:0,playing:false,mail:null,call:null};
@@ -1964,6 +2192,7 @@ const ICONS={
   weather:{name:'天氣',bg:'linear-gradient(160deg,#6fc3ff,#2d7fd0)',svg:'<svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3.4" fill="#ffd34d"/><path d="M8 18h9a3.3 3.3 0 000-6.6 4.4 4.4 0 00-8.3 1A2.8 2.8 0 008 18z" fill="#fff"/></svg>'},
   video:{name:'街影',bg:'linear-gradient(160deg,#b04cff,#5b2bd6)',svg:'<svg viewBox="0 0 24 24"><rect x="3.5" y="6" width="17" height="12" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/><path d="M3.5 9.4h2.2M3.5 14.6h2.2M18.3 9.4h2.2M18.3 14.6h2.2" stroke="#fff" stroke-width="1.4"/><path d="M10.2 9.3v5.4l4.5-2.7z" fill="#fff"/></svg>'},
   phone:{name:'電話',bg:'linear-gradient(160deg,#5fe07a,#1fa94a)',svg:'<svg viewBox="0 0 24 24"><path fill="#fff" d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>'},
+  bag:{name:'背包',bg:'linear-gradient(160deg,#c98a4b,#7a4a1f)',svg:'<svg viewBox="0 0 24 24"><path d="M8 8V6.5A2.5 2.5 0 0110.5 4h3A2.5 2.5 0 0116 6.5V8" fill="none" stroke="#fff" stroke-width="1.7"/><rect x="4.5" y="8" width="15" height="12" rx="2.5" fill="#fff"/><rect x="10.5" y="11.5" width="3" height="3" rx=".6" fill="#7a4a1f"/></svg>'},
   mail:{name:'郵件',bg:'linear-gradient(160deg,#6d7cff,#3340c9)',svg:'<svg viewBox="0 0 24 24"><rect x="3.5" y="6" width="17" height="12.5" rx="2" fill="#fff"/><path d="M4.2 7l7.8 6 7.8-6" fill="none" stroke="#3340c9" stroke-width="1.7" stroke-linejoin="round"/></svg>'},
 };
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -2028,7 +2257,7 @@ function renderHome(){
   pView.innerHTML=`<div class="wid"><div class="wtop"><span>${districtAt(heroPos.x,heroPos.z).zh}</span><span id="wClock">${clock()}</span></div>
     <div class="wrow"><div><small>現金</small><b id="wCash">${fmt(S.cash)}</b></div><div><small>通緝</small><b id="wWant" class="st">${S.wanted?'★'.repeat(S.wanted):'—'}</b></div><div><small>天氣</small><b id="wWx">${S.wx.kind} ${Math.round(S.wx.temp)}°</b></div></div>
     <div class="wmsg" id="wMsg">${mission?mission.title+' 進行中':storyMarker()?'下一步：'+storyMarker().title:'自由探索中'}</div></div>
-    <div class="grid">${['mission','map','mrt','weather','video'].map(iconHTML).join('')}</div>
+    <div class="grid">${['mission','map','mrt','weather','video','bag'].map(iconHTML).join('')}</div>
     <div class="pdots"><i class="on"></i><i></i></div>
     <div class="dock">${['phone','mail'].map(iconHTML).join('')}</div>`;
   updateBadges();
@@ -2064,6 +2293,14 @@ function renderApp(){
     const list=[];forPOIs(Math.floor(heroPos.x/CELL),Math.floor(heroPos.z/CELL),10,q=>{if(q.type==='mrt')list.push(q)});list.sort((a,b)=>hyp(a,heroPos)-hyp(b,heroPos));
     pView.innerHTML=nav('臺北捷運')+`<p class="hint" style="margin-top:0">走進捷運站入口按 E，就能快速移動到其他車站。</p><div class="grp">${list.slice(0,8).map((q,i)=>`<div class="cell"><div class="mc"><b>${q.name}</b><div class="sub">${districtAt(q.x,q.z).zh}・${fmt(hyp(q,heroPos))} m</div></div><button class="pbtn sm" type="button" data-i="${i}">導航</button></div>`).join('')}</div>`;
     pView.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{const q=list[+b.dataset.i];if(mission){toast('任務進行中，導航指向任務目標','info');return}waypoint={x:q.x,z:q.z,name:q.name};toast('導航到 '+q.name,'info');closePhone()});
+  }
+  else if(app==='bag'){
+    const W=S.owned.map(id=>{const w=WEAPONS[id];return `<div class="cell"><div class="mc"><b>${w.name}${w.rare?' <span style="color:#ffd34d;font-size:12px">稀有</span>':''}</b><div class="sub">${w.kind==='gun'?'槍械・傷害 '+w.dmg:w.kind==='throw'?'投擲・無限使用':'近戰・傷害 '+w.dmg}</div></div>${S.weapon===id?'<span class="green">使用中</span>':`<button class="pbtn sm" type="button" data-w="${id}">裝備</button>`}</div>`}).join('');
+    const ITEMS={amulet:['平安符','生命歸零時自動回復一次'],pass:['捷運月票','搭捷運免費'],vip:['夜市 VIP 卡','商店八折']};
+    const I=Object.keys(ITEMS).filter(k=>S.items[k]).map(k=>`<div class="cell"><div class="mc"><b>${ITEMS[k][0]}</b><div class="sub">${ITEMS[k][1]}</div></div></div>`).join('')||'<div class="cell"><span class="mut">還沒有特殊道具</span></div>';
+    const hints=[];if(!S.owned.includes('slipper'))hints.push('早餐店的阿嬤好像很喜歡跟人聊天');if(!S.owned.includes('guitar'))hints.push('路口的街頭藝人收到夠多打賞會很感動');if(!S.items.amulet)hints.push('廟公好像在找什麼東西');if(!S.items.pass)hints.push('捷運站務員在辦知識問答');if(!S.items.vip)hints.push('夜市雞排攤很缺人手');if(!S.owned.includes('goldgun'))hints.push('聽說半夜的公園有個怪阿伯');
+    pView.innerHTML=nav('背包')+`<h3 class="sec">武器（子彈 ${S.ammo}）</h3><div class="grp">${W}</div><h3 class="sec">特殊道具</h3><div class="grp">${I}</div>`+(hints.length?`<h3 class="sec">傳聞</h3><div class="grp">${hints.map(h=>`<div class="cell"><span class="sub">${h}</span></div>`).join('')}</div>`:'');
+    pView.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>{setWeapon(b.dataset.w);renderApp()});
   }
   else if(app==='weather'){
     const h=Math.floor(S.clock/60)%24;const fc=[1,2,3,4,5,6].map(k=>{const hh=(h+k*2)%24;return `<div class="cell"><span>${String(hh).padStart(2,'0')}:00</span><span class="mut">${k===2&&S.wx.kind!=='雨'?'陣雨 40%':S.wx.kind==='雨'&&k<3?'雨':'多雲時晴'}　${Math.round(tempAt(hh))}°</span></div>`}).join('');
@@ -2190,8 +2427,9 @@ function frame(now){
       if(S.mode==='gps'){const spd=followEst(dt);poseHero(dt,spd,false)}
       else{const r=moveHeroFree(dt,ix,iy,sprint);poseHero(dt,r.spd,r.run)}
     }
-    if(S.reload>0){S.reload-=dt;if(S.reload<=0){const n=Math.min(12-S.mag,S.ammo);S.mag+=n;S.ammo-=n;renderWeapon()}}
-    if(S.fireHeld&&S.weapon==='pistol')attack();
+    if(S.reload>0){S.reload-=dt;if(S.reload<=0){const n=Math.min((WEAPONS[S.weapon].mag||12)-S.mag,S.ammo);S.mag+=n;S.ammo-=n;renderWeapon()}}
+    if(S.fireHeld&&WEAPONS[S.weapon].kind!=='melee')attack();
+    updateProjectiles(dt);updateNPCs(dt,now);
     streamChunks(heroPos);
     actT+=dt;if(actT>.5){actT=0;spawnVehicles();maintainEnemies();maintainPickups();maintainCrowds()}
     ctxT+=dt;if(ctxT>.12){ctxT=0;updateContext()}
