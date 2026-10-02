@@ -203,6 +203,29 @@ body.coarse .tk-text{font-size:15px}
 .tip{font-size:12px;color:var(--muted);line-height:1.6;margin-top:8px}
 .tip b{color:var(--amber)}
 
+/* ---------- character select ---------- */
+.chars{z-index:13;position:absolute;inset:0;display:flex;align-items:flex-start;padding:20px clamp(16px,4vw,48px);background:linear-gradient(90deg,rgba(6,8,14,.94) 0%,rgba(6,8,14,.7) 48%,rgba(6,8,14,0) 72%);pointer-events:auto;overflow:auto}
+.cbox{width:min(500px,100%);display:grid;gap:10px;margin:auto 0}
+.cbox h2{margin:0;font:900 26px var(--f-body);letter-spacing:.1em}
+.cbox h2 small{display:block;font:400 11px var(--f-display);letter-spacing:.32em;color:var(--amber);margin-top:4px}
+.cgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.cc{display:grid;justify-items:center;gap:2px;padding:8px 4px 10px;border-radius:12px;border:1.5px solid var(--line);background:rgba(20,24,38,.85);color:var(--ink);cursor:pointer}
+.cc canvas{width:56px;height:56px;border-radius:50%;margin-bottom:2px}
+.cc b{font:700 14px var(--f-body)}.cc span{font:500 11px var(--f-body);color:var(--muted)}
+.cc.on{border-color:var(--amber);background:rgba(255,181,71,.14)}
+.cinfo{background:rgba(20,24,38,.9);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.ci-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.cinfo h3{margin:0;font:900 20px var(--f-body)}.cinfo h3 small{font:400 11px var(--f-display);letter-spacing:.2em;color:var(--muted);margin-left:8px}
+.cinfo .role{font:700 12px var(--f-body);color:var(--amber)}
+.cinfo p{margin:6px 0 10px;font-size:13px;line-height:1.6;color:#cfd5e6}
+.sb{display:grid;grid-template-columns:36px 1fr 46px;align-items:center;gap:8px;font-size:12px;margin:5px 0}
+.sb i{height:8px;border-radius:4px;background:rgba(255,255,255,.1);overflow:hidden}.sb em{display:block;height:100%;background:var(--amber);border-radius:4px}
+.sb b{font:500 12px var(--f-mono);text-align:right}
+.trait{margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(111,208,140,.12);font-size:13px;color:#bff0cb}
+.trait b{display:block;font-size:11px;letter-spacing:.14em;color:#6fd08c;margin-bottom:2px}
+.cact{display:flex;gap:8px}.cact .mbtn{flex:1}
+@media (max-width:640px),(max-height:520px){.chars{align-items:flex-start;background:rgba(6,8,14,.82)}.cc canvas{width:48px;height:48px}.cinfo p{display:none}.cbox h2{font-size:20px}}
+@media (orientation:portrait) and (max-width:640px){.chars{align-items:flex-end;background:linear-gradient(0deg,rgba(6,8,14,.95) 55%,rgba(6,8,14,0) 85%)}}
 /* ---------- big map ---------- */
 .bigmap{z-index:14;position:absolute;inset:0;background:#0e1422;pointer-events:auto}
 .bigmap canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}
@@ -457,10 +480,20 @@ body.coarse .tk-text{font-size:15px}
     </div>
   </div>
 
+  <div class="chars" id="chars" hidden>
+    <div class="cbox">
+      <h2>選擇角色<small>CHOOSE YOUR CHARACTER</small></h2>
+      <div class="cgrid" id="charGrid"></div>
+      <div class="cinfo" id="charInfo"></div>
+      <div class="cact"><button class="mbtn" type="button" id="charBack">返回<small>BACK</small></button><button class="mbtn primary" type="button" id="charGo">出發<small>GO</small></button></div>
+    </div>
+  </div>
+
   <div class="title" id="title">
     <div class="tbox">
       <h1 class="logo"><span class="l1">夜行步城</span><span class="l2">TAIPEI OPEN WORLD<i></i></span></h1>
       <button class="mbtn primary" type="button" id="bStart">開始遊戲<small>START</small></button>
+      <button class="mbtn" type="button" id="tChar">選擇角色<small>CHARACTER</small></button>
       <button class="mbtn" type="button" id="tHelp">操作說明<small>CONTROLS</small></button>
       <button class="mbtn" type="button" id="tSet">設定<small>SETTINGS</small></button>
       <p class="tip"><b>小提示</b>　<span id="tipText">按 M 打開地圖，點一下就能設定導航。</span></p>
@@ -594,7 +627,7 @@ const geoCache={};
 const BG=(w,h,d)=>{const k='b'+w+'|'+h+'|'+d;return geoCache[k]||(geoCache[k]=new THREE.BoxGeometry(w,h,d))};
 const CG=(a,b,h,n)=>{const k='c'+a+'|'+b+'|'+h+'|'+n;return geoCache[k]||(geoCache[k]=new THREE.CylinderGeometry(a,b,h,n))};
 const UNIT=new THREE.BoxGeometry(1,1,1);
-const headG=new THREE.SphereGeometry(.28,8,6),hairG=new THREE.SphereGeometry(.3,8,4,0,Math.PI*2,0,Math.PI*.55);
+const headG=new THREE.SphereGeometry(.28,8,6),hairG=new THREE.SphereGeometry(.3,8,4,0,Math.PI*2,0,Math.PI*.47);
 const sphereLo=new THREE.SphereGeometry(.5,8,6),coneG=new THREE.ConeGeometry(1,1,7),icoG=new THREE.IcosahedronGeometry(1,0);
 const planeG=new THREE.PlaneGeometry(1,1);planeG.rotateX(-Math.PI/2);
 const ringG=new THREE.RingGeometry(1.6,2.3,28);ringG.rotateX(-Math.PI/2);
@@ -908,11 +941,13 @@ for(let i=0;i<RAIN_N;i++){const x=(Math.random()-.5)*60,y=Math.random()*30,z=(Ma
 /* ================= people ================= */
 const SKINS=[0xe2b48c,0xd9a57f,0xc68b62,0xf0c9a0,0xb57a52];
 const HAIRS=[0x1a1714,0x2b1f18,0x3a2a1e,0x111111,0x6b4a2e,0x8a8a8a];
+const eyeG=new THREE.BoxGeometry(.06,.07,.04);
 function person(shirt,skin=0xe2b48c,pants=0x2b3148,hair=0x1a1714){
   const g=new THREE.Group();
   const body=new THREE.Mesh(BG(.8,1.1,.45),M(shirt));body.position.y=1.5;g.add(body);
   const head=new THREE.Mesh(headG,M(skin));head.position.y=2.3;g.add(head);
-  const hr=new THREE.Mesh(hairG,M(hair));hr.position.y=2.33;g.add(hr);
+  const hr=new THREE.Mesh(hairG,M(hair));hr.position.set(0,2.33,-.03);g.add(hr);
+  for(const x of [-.1,.1]){const e=new THREE.Mesh(eyeG,M(0x1a1a1a));e.position.set(x,2.32,.25);g.add(e)}
   const limb=(w,h,x,y,c)=>{const p=new THREE.Group();p.position.set(x,y,0);const m=new THREE.Mesh(BG(w,h,w),M(c));m.position.y=-h/2;p.add(m);g.add(p);return p};
   const legL=limb(.3,.95,-.2,.95,pants),legR=limb(.3,.95,.2,.95,pants);
   const armL=limb(.2,.9,-.52,2.02,shirt),armR=limb(.2,.9,.52,2.02,shirt);
@@ -1077,7 +1112,7 @@ function queueVehicles(list,player,playerVeh){
 const S={cash:500,pending:0,hp:100,st:100,wanted:0,heat:0,bust:0,weapon:'fist',owned:['fist'],mag:0,ammo:0,reload:0,kills:0,veh:null,
   mode:'free',dead:false,paused:true,started:false,clock:17*60+10,wx:{kind:'晴',temp:29,rain:0,next:600},story:0,done:0,picked:0,delivered:0,
   atkCd:0,swing:0,aim:0,gunHeat:0,lastHurt:0,pedHit:0,trust:100,steps:0,stepAcc:0,raw:0,rej:0,acc:6,outage:0,lastFix:0,gateStreak:0,real:false,spoof:false,spoofDir:{x:1,z:0},pdrBias:0,pdrScale:1,returning:false,
-  run:false,sens:1,invY:false,showHelp:true,items:{},npc:{}};
+  run:false,sens:1,invY:false,showHelp:true,items:{},npc:{},maxHp:100,maxSt:100,atk:1,spd:1,stDrain:1,regen:1,food:1};
 const hero=person(0x2f6fd6,0xe2b48c,0x23283a,0x15120f);scene.add(hero.g);
 const heroHelmet=new THREE.Mesh(helmetG,M(0xf2f2f2));heroHelmet.position.y=2.3;heroHelmet.visible=false;hero.g.add(heroHelmet);
 const heroPos={x:START.x,y:0,z:START.z};const heroVel={x:0,z:0};let heroVy=0,grounded=true,heroYaw=Math.PI;
@@ -1276,16 +1311,79 @@ function updatePeds(dt,now){
 }
 
 
+/* ================= playable characters ================= */
+const CHARS=[
+  {id:'hao',name:'林志豪',en:'HAO',gender:'m',kin:'表弟',skin:0xeec39a,hair:0x15120f,style:'short',shirt:0x2f9e5a,pants:0x23283a,
+   role:'前外送員',bio:'在臺北跑了五年外送，每條巷子都熟，騎車又快又穩。',hp:110,st:150,atk:1,spd:1,trait:'機車、U-bike 極速 +18%',apply:s=>{s.rider=true}},
+  {id:'yi',name:'陳怡君',en:'YI-CHUN',gender:'f',kin:'表妹',skin:0xf2cba6,hair:0x1a1410,style:'pony',shirt:0xc8323c,pants:0x22252f,
+   role:'拳擊教練',bio:'在萬華的拳擊館教課，出拳比誰都重。',hp:100,st:110,atk:1.4,spd:1,trait:'所有攻擊傷害 ×1.4'},
+  {id:'marcus',name:'馬可',en:'MARCUS',gender:'m',kin:'表弟',skin:0x6b4630,hair:0x120d0a,style:'buzz',shirt:0xf2f2f2,pants:0x2b2f3a,
+   role:'夜市廚師',bio:'從小跟著媽媽在夜市擺攤，吃得多、扛得住。',hp:150,st:100,atk:1.05,spd:.95,trait:'吃東西回血加倍',apply:s=>{s.food=2}},
+  {id:'amara',name:'艾瑪',en:'AMARA',gender:'f',kin:'表妹',skin:0x5a3a28,hair:0x0f0b08,style:'bun',shirt:0x7a4fc9,pants:0x1d1f2a,
+   role:'射擊選手',bio:'前國家射擊隊選手，現在在臺北教小朋友射箭。',hp:100,st:110,atk:1.1,spd:1,trait:'開槍百發百中，裝填快一倍',apply:s=>{s.sharp=true}},
+  {id:'lukas',name:'路卡',en:'LUKAS',gender:'m',kin:'表弟',skin:0xf3d6c4,hair:0xd9b65a,style:'short',shirt:0xe8862f,pants:0x2b3148,
+   role:'馬拉松跑者',bio:'每天清晨沿著河濱跑二十公里，跑起來誰都追不上。',hp:95,st:130,atk:1,spd:1.15,trait:'跑最快，衝刺體力消耗 -30%',apply:s=>{s.stDrain=.7}},
+  {id:'sophie',name:'蘇菲',en:'SOPHIE',gender:'f',kin:'表妹',skin:0xf5dccb,hair:0x7a4a26,style:'pony',shirt:0x6ab4e8,pants:0x2b3148,
+   role:'急診護理師',bio:'在臺大醫院急診室上班，最懂怎麼照顧自己。',hp:115,st:100,atk:.95,spd:1,trait:'自動回血 3 倍，醫院看診半價',apply:s=>{s.regen=3;s.nurse=true}},
+];
+let PC=CHARS[0];
+const kin=()=>PC.kin;
+function heal(n){S.hp=Math.min(S.maxHp,S.hp+n*S.food)}
+const heroMats={shirt:new THREE.MeshLambertMaterial(),pants:new THREE.MeshLambertMaterial(),skin:new THREE.MeshLambertMaterial(),hair:new THREE.MeshLambertMaterial()};
+hero.body.material=heroMats.shirt;hero.armL.children[0].material=heroMats.shirt;hero.armR.children[0].material=heroMats.shirt;
+hero.legL.children[0].material=heroMats.pants;hero.legR.children[0].material=heroMats.pants;hero.head.material=heroMats.skin;hero.hr.material=heroMats.hair;
+const pony=new THREE.Mesh(BG(.2,.55,.18),heroMats.hair);pony.position.set(0,-.3,-.3);hero.hr.add(pony);
+const bun=new THREE.Mesh(new THREE.SphereGeometry(.17,8,6),heroMats.hair);bun.position.set(0,.18,-.2);hero.hr.add(bun);
+function applyChar(c){
+  PC=c;heroMats.shirt.color.setHex(c.shirt);heroMats.pants.color.setHex(c.pants);heroMats.skin.color.setHex(c.skin);heroMats.hair.color.setHex(c.hair);
+  pony.visible=c.style==='pony';bun.visible=c.style==='bun';hero.hr.scale.set(1,c.style==='buzz'?.75:1,1);hero.hr.position.y=c.style==='buzz'?2.36:2.33;hero.hr.position.z=-.03;
+  hero.body.scale.set(c.gender==='f'?.9:1,1,1);
+  Object.assign(S,{maxHp:c.hp,maxSt:c.st,atk:c.atk,spd:c.spd,stDrain:1,regen:1,food:1,rider:false,sharp:false,nurse:false});if(c.apply)c.apply(S);
+  S.hp=S.maxHp;S.st=S.maxSt;
+}
+applyChar(PC);
+
+/* ---------- selection screen ---------- */
+function drawAvatar(cv,c){
+  const g=cv.getContext('2d'),W=cv.width,H=cv.height;const hex=n=>'#'+n.toString(16).padStart(6,'0');
+  g.clearRect(0,0,W,H);g.fillStyle='#1b2133';g.fillRect(0,0,W,H);
+  g.fillStyle=hex(c.shirt);g.beginPath();g.ellipse(W/2,H*1.02,W*.42,H*.36,0,0,6.3);g.fill();
+  g.fillStyle=hex(c.skin);g.fillRect(W*.43,H*.56,W*.14,H*.14);
+  if(c.style==='pony'){g.fillStyle=hex(c.hair);g.fillRect(W*.6,H*.3,W*.1,H*.36)}
+  g.fillStyle=hex(c.skin);g.beginPath();g.arc(W/2,H*.43,W*.2,0,6.3);g.fill();
+  g.fillStyle=hex(c.hair);g.beginPath();
+  if(c.style==='buzz'){g.arc(W/2,H*.41,W*.205,Math.PI*1.08,Math.PI*1.92)}else{g.arc(W/2,H*.42,W*.215,Math.PI*1.02,Math.PI*1.98);g.lineTo(W*.7,H*.4);g.lineTo(W*.3,H*.4)}
+  g.fill();if(c.style==='bun'){g.beginPath();g.arc(W/2,H*.18,W*.09,0,6.3);g.fill()}
+  g.fillStyle='rgba(0,0,0,.55)';g.beginPath();g.arc(W*.43,H*.45,W*.018,0,6.3);g.arc(W*.57,H*.45,W*.018,0,6.3);g.fill();
+}
+let selIdx=0;
+(function loadSaved(){try{const v=localStorage.getItem('nwc-char');const i=CHARS.findIndex(c=>c.id===v);if(i>=0){selIdx=i;applyChar(CHARS[i])}}catch(e){}})();
+function renderChars(){
+  $('charGrid').innerHTML=CHARS.map((c,i)=>`<button class="cc${i===selIdx?' on':''}" type="button" data-i="${i}" aria-pressed="${i===selIdx}"><canvas width="96" height="96"></canvas><b>${c.name}</b><span>${c.role}</span></button>`).join('');
+  $('charGrid').querySelectorAll('.cc').forEach(b=>{drawAvatar(b.querySelector('canvas'),CHARS[+b.dataset.i]);b.onclick=()=>{selIdx=+b.dataset.i;applyChar(CHARS[selIdx]);renderChars()}});
+  const c=CHARS[selIdx];
+  const bar=(label,v,max,txt)=>`<div class="sb"><span>${label}</span><i><em style="width:${Math.round(Math.min(1,v/max)*100)}%"></em></i><b>${txt}</b></div>`;
+  $('charInfo').innerHTML=`<div class="ci-top"><h3>${c.name}<small>${c.en}</small></h3><span class="role">${c.role}</span></div><p>${c.bio}</p>
+    ${bar('生命',c.hp,150,c.hp)}${bar('體力',c.st,150,c.st)}${bar('攻擊',c.atk,1.4,'×'+c.atk.toFixed(2))}${bar('速度',c.spd,1.15,'×'+c.spd.toFixed(2))}
+    <div class="trait"><b>特殊能力</b>${c.trait}</div>`;
+}
+function openChars(){$('title').hidden=true;$('chars').hidden=false;S.selecting=true;renderChars();setTimeout(()=>{const b=$('charGrid').querySelector('.cc.on');b&&b.focus()},0)}
+function closeChars(){$('chars').hidden=true;S.selecting=false}
+$('charBack').onclick=()=>{closeChars();$('title').hidden=false};
+$('charGo').onclick=()=>{try{localStorage.setItem('nwc-char',CHARS[selIdx].id)}catch(e){}closeChars();startGame()};
+$('tChar').onclick=openChars;
+
+
 /* ================= player on foot ================= */
 function moveHeroFree(dt,ix,iy,sprint){
   const f={x:-Math.sin(camYaw),z:-Math.cos(camYaw)},rt={x:Math.cos(camYaw),z:-Math.sin(camYaw)};
   const mag=Math.min(1,Math.hypot(ix,iy));
   const canRun=sprint&&S.st>1&&mag>.2;
-  const sp=(canRun?7:3.4)*mag;
+  const sp=(canRun?7:3.4)*mag*S.spd;
   let dx=f.x*iy+rt.x*ix,dz=f.z*iy+rt.z*ix;const dl=Math.hypot(dx,dz)||1;dx/=dl;dz/=dl;
   const k=Math.min(1,dt*(grounded?10:2));
   heroVel.x+=(dx*sp-heroVel.x)*k;heroVel.z+=(dz*sp-heroVel.z)*k;
-  S.st=clamp(S.st+(canRun?-15:10)*dt,0,100);
+  S.st=clamp(S.st+(canRun?-15*S.stDrain:10)*dt,0,S.maxSt);
   if(jumpQ&&grounded){heroVy=6.2;grounded=false}jumpQ=false;
   if(!grounded){heroVy-=18*dt;heroPos.y+=heroVy*dt;if(heroPos.y<=0){heroPos.y=0;heroVy=0;grounded=true}}
   const nx=heroPos.x+heroVel.x*dt,nz=heroPos.z+heroVel.z*dt;
@@ -1313,7 +1411,7 @@ function driveVehicle(v,dt,thr,steer,hb){
   else if(thr<-.05){fwd-=(fwd>.5?st.acc*2.2:st.acc*.7)*(-thr)*dt}
   else fwd*=1-.45*dt;
   if(hb){fwd*=1-1.4*dt}
-  fwd=clamp(fwd,-st.rev,st.max*(v.type==='car'&&v.kind==='taxi'?.95:1));
+  fwd=clamp(fwd,-st.rev,st.max*(v.type==='car'&&v.kind==='taxi'?.95:1)*(S.rider&&v.type!=='car'?1.18:1));
   const turnK=Math.min(1,Math.abs(fwd)/4)*(1-.35*Math.min(1,Math.abs(fwd)/st.max))*(hb?1.7:1);
   v.h-=steer*st.turn*turnK*Math.sign(fwd||1)*dt;
   const grip=hb?1.6:st.grip;const keep=Math.max(0,1-grip*dt);lx*=keep;lz*=keep;
@@ -1429,7 +1527,7 @@ function giveWeapon(id,msg){if(!S.owned.includes(id))S.owned.push(id);setWeapon(
 function renderWeapon(){const w=WEAPONS[S.weapon];$('wName').textContent=w.name;$('wAmmo').textContent=w.kind==='gun'?(S.reload>0?'裝填中':`${S.mag} / ${S.ammo}`):w.kind==='throw'?'∞':'';
   $('cross').hidden=w.kind==='melee'||S.dead;$('wIcon').innerHTML=WICON[w.id]}
 function cycleWeapon(dir=1){const o=S.owned;if(o.length<2)return;setWeapon(o[mod(o.indexOf(S.weapon)+dir,o.length)])}
-function reload(){const w=WEAPONS[S.weapon];if(w.kind!=='gun'||S.reload>0||S.mag>=w.mag||S.ammo<=0)return;S.reload=1.1;renderWeapon()}
+function reload(){const w=WEAPONS[S.weapon];if(w.kind!=='gun'||S.reload>0||S.mag>=w.mag||S.ammo<=0)return;S.reload=S.sharp?.55:1.1;renderWeapon()}
 const tracers=[];
 function tracer(a,b,col,ay=1.9,by=1.6){const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(a.x,ay,a.z),new THREE.Vector3(b.x,by,b.z)]);
   const l=new THREE.Line(g,new THREE.LineBasicMaterial({color:col||0xffe08a,transparent:true}));scene.add(l);tracers.push({l,t:.14})}
@@ -1462,7 +1560,7 @@ function attack(){
     S.mag--;S.atkCd=now+w.cd;S.aim=.6;flash.intensity=w.id==='goldgun'?5:3;flash.position.set(heroPos.x,2,heroPos.z);
     const tg=findTarget(w.range,.42);const f=aimDir();S.aimYaw=Math.atan2(f.x,f.z);
     let end;
-    if(tg){const hit=Math.random()<(w.id==='goldgun'?.95:.85);end={x:tg.o.x+(hit?0:(Math.random()-.5)*3),z:tg.o.z+(hit?0:(Math.random()-.5)*3)};if(hit)hurtEnemy(tg.o,w.dmg,heroPos);S.aimYaw=Math.atan2(tg.o.x-heroPos.x,tg.o.z-heroPos.z)}
+    if(tg){const hit=Math.random()<(S.sharp?1:w.id==='goldgun'?.95:.85);end={x:tg.o.x+(hit?0:(Math.random()-.5)*3),z:tg.o.z+(hit?0:(Math.random()-.5)*3)};if(hit)hurtEnemy(tg.o,w.dmg,heroPos);S.aimYaw=Math.atan2(tg.o.x-heroPos.x,tg.o.z-heroPos.z)}
     else{end={x:heroPos.x+f.x*30,z:heroPos.z+f.z*30};const ped=pedInLine(25,.985);if(ped){knockPed(ped,now);end={x:ped.x,z:ped.z}}}
     tracer(heroPos,end,w.id==='goldgun'?0xffd34d:null,S.veh?1.6:1.9);panicPeds(heroPos,45);
     if(!S.wanted&&Math.random()<.4)addWanted(1,'槍聲，有人報警');
@@ -1513,7 +1611,7 @@ function maintainEnemies(){
   }
 }
 function hurtEnemy(e,dmg,from){
-  if(e.dead)return;e.hp-=dmg;e.alert=true;
+  if(e.dead)return;if(from===heroPos&&dmg<900)dmg*=S.atk;e.hp-=dmg;e.alert=true;
   const d=Math.max(.1,hyp(e,from));const kx=(e.x-from.x)/d,kz=(e.z-from.z)/d;
   if(walkable(e.x+kx*.8,e.z+kz*.8)){e.x+=kx*.8;e.z+=kz*.8}
   e.p.body.material.emissive.setHex(0x662222);setTimeout(()=>e.p.body.material.emissive.setHex(0),120);
@@ -1601,7 +1699,7 @@ function respawnAt(type,why,fee){
   const p=nearestPOI(type,heroPos,14)||{x:START.x,z:START.z,name:'市區'};
   setTimeout(()=>fadeTo(()=>{
     heroPos.x=p.x;heroPos.z=p.z+1.5;heroPos.y=0;heroVel.x=heroVel.z=0;est.x=truth.x=heroPos.x;est.z=truth.z=heroPos.z;est.cx=est.cz=0;
-    S.hp=100;S.dead=false;S.returning=false;clearPolice();
+    S.hp=S.maxHp;S.dead=false;S.returning=false;clearPolice();
     enemies.forEach(e=>{if(!e.dead){scene.remove(e.p.g);e.dead=1}});
     if(mission)failMission(why);
     bigMsg(why,`在${p.name}醒來，付了 NT$${fmt(fee)}`,true,3000);streamChunks(heroPos,true);
@@ -1780,13 +1878,13 @@ function openShop(p){
   }
   $('sheetShop').hidden=false;S.paused=true;
 }
-function priceOf(it){return Math.round(it.price*(S.items.vip?.8:1))}
+function priceOf(it){return Math.round(it.price*(S.items.vip?.8:1)*(it.id==='heal'&&S.nurse?.5:1))}
 function buy(type,id){
   const it=SHOPS[type].find(s=>s.id===id);if(!pay(priceOf(it)))return;
   if(id==='bat'||id==='pistol'){S.owned.push(id);if(id==='pistol'){S.mag=12}setWeapon(id)}
   else if(id==='ammo'){S.ammo+=24;renderWeapon()}
-  else if(id==='egg')S.hp=Math.min(100,S.hp+20);else if(id==='rice')S.hp=Math.min(100,S.hp+40);else if(id==='bento'||id==='heal')S.hp=100;
-  else if(id==='drink'){S.st=100;S.boost=60}
+  else if(id==='egg')heal(20);else if(id==='rice')heal(40);else if(id==='bento')heal(999);else if(id==='heal')S.hp=S.maxHp;
+  else if(id==='drink'){S.st=S.maxSt;S.boost=60}
   toast('購買 '+it.name,'good',1500);if(shopPOI)openShop(shopPOI);
 }
 
@@ -2096,9 +2194,9 @@ makeNPC({id:'ama',name:'阿嬤',shirt:0x8a5a9e,pants:0x3a3f52,hair:0xd8d8d8,at:(
   quest:()=>!S.owned.includes('slipper')&&(NS.amaTalks||0)>=2,
   talk(n){
     const c=cnt('amaTalks');
-    const buy=['買蛋餅 NT$35',()=>{if(pay(35)){S.hp=Math.min(100,S.hp+40);reply(['來，剛煎好的，小心燙。'])}}];
+    const buy=['買蛋餅 NT$35',()=>{if(pay(35)){heal(40);reply(['來，剛煎好的，小心燙。'])}}];
     if(c>=3&&!S.owned.includes('slipper')){dialog(n,['又來了喔？阿嬤看你很順眼。','這個給你，阿嬤以前拿它丟你爸，百發百中。','壞人追你，就用這個丟他！'],null);S.npcAfter=()=>giveWeapon('slipper','阿嬤的藍白拖：可以丟出去，無限使用');talkChoices=[['謝謝阿嬤',()=>{endTalk();S.npcAfter()}]];return}
-    const lines=[['少年仔，吃早餐了沒？阿嬤的蛋餅很好吃喔。'],['你是阿彬的表弟喔？小時候常常來這裡偷吃肉鬆。'],['現在的年輕人都在看手機，走路要看路啦！'],['藍白拖用得還習慣嗎？阿嬤那雙還在店裡。'],['下雨天記得走騎樓，不要淋到感冒。']];
+    const lines=[['少年仔，吃早餐了沒？阿嬤的蛋餅很好吃喔。'],[`你是阿彬的${kin()}喔？小時候常常來這裡偷吃肉鬆。`],['現在的年輕人都在看手機，走路要看路啦！'],['藍白拖用得還習慣嗎？阿嬤那雙還在店裡。'],['下雨天記得走騎樓，不要淋到感冒。']];
     dialog(n,lines[Math.min(c-1,lines.length-1)+(c>3?Math.floor(Math.random()*2):0)]||lines[0],[buy]);
   }});
 
@@ -2122,7 +2220,7 @@ makeNPC({id:'miaogong',name:'廟公 清伯',shirt:0xd9a441,pants:0x3a3f52,hair:0
   talk(n){
     const opts=[['求籤 NT$20',()=>{if(!pay(20))return;const now=S.clock;if(NS.lastLot&&now-NS.lastLot<60){reply(['一個時辰求一次就好，神明也要休息。']);return}NS.lastLot=now;
       const r=Math.random();if(r<.2){S.cash+=520;renderMoney();reply(['……上上籤！','「財源廣進」，今天出門會撿到錢。','（你在香爐旁邊撿到 NT$520）'])}
-      else if(r<.5){S.hp=100;reply(['上籤。「身體健康，萬事如意」。','（你覺得精神好多了，生命全滿）'])}
+      else if(r<.5){S.hp=S.maxHp;reply(['上籤。「身體健康，萬事如意」。','（你覺得精神好多了，生命全滿）'])}
       else if(r<.85)reply(['中籤。「平安就是福」。','沒事就是好事。'])
       else reply(['下籤……「今日騎車宜慢」。','年輕人，今天騎車小心點。'])}],
       ['聊聊',()=>reply([pick(['這間廟有兩百多年了，比你阿公的阿公還老。','初一十五人最多，拜拜要排隊。','聽說半夜公園有個怪阿伯，我年輕時也見過他。','拜拜的時候要先報姓名跟地址，神明才找得到你。'])])]];
@@ -2155,7 +2253,7 @@ makeNPC({id:'chicken',name:'雞排攤 阿龍',shirt:0xf2f2f2,pants:0x2b3148,hair
   extra:m=>{const ap=new THREE.Mesh(BG(.82,.9,.05),M(0xc8102e));ap.position.set(0,1.25,.25);m.g.add(ap)},
   quest:()=>!NS.chickenDone&&!mission,
   talk(n){
-    const opts=[['買雞排 NT$80',()=>{if(pay(80)){S.hp=Math.min(100,S.hp+60);reply(['大雞排一塊，要切要辣？……都幫你加了啦！'])}}]];
+    const opts=[['買雞排 NT$80',()=>{if(pay(80)){heal(60);reply(['大雞排一塊，要切要辣？……都幫你加了啦！'])}}]];
     if(!NS.chickenDone&&!mission)opts.push(['有需要幫忙嗎？',()=>reply(['你來得正好！101 下面有客人訂了二十塊雞排，我走不開。','三分鐘內送到，冷掉就不好吃了。給你一千！'],[['我去送',()=>{endTalk();chickenQuest(n)}],['太遠了',endTalk]])]);
     dialog(n,[NS.chickenDone?'VIP 來了！今天要吃什麼？':pick(['大雞排剛起鍋，香喔！','夜市就是要吃雞排配珍奶啦。','你知道嗎？我的雞排比臉還大。'])],opts);
   }});
@@ -2243,7 +2341,7 @@ const CONTACTS=[
     if(S.story<STORY.length)return{lines:['下一件事在地圖上的黃色 M 標記。','走進黃色圈圈按 E 就能開始。']};
     return{lines:['最近生意不錯吧？','想賺錢就接外送，下雨天小費特別多。']};}},
   {id:'k',name:'老K',role:'快遞・派單',color:'#ffb547',script(){
-    if(S.story<3)return{lines:['你誰啊？','……喔，阿彬的表弟。等你準備好再說。']};
+    if(S.story<3)return{lines:['你誰啊？',`……喔，阿彬的${kin()}。等你準備好再說。`]};
     if(!mission)return{lines:['有件貨要送，NT$3,000。','做不做？'],actions:[['接單',()=>{endCall();closePhone();missionCourier(false)}]]};
     return{lines:['專心把手上的事做完。']};}},
   {id:'law',name:'陳律師',role:'撤銷通緝',color:'#c9a0ff',script(){
@@ -2432,7 +2530,7 @@ function updateEnv(dt){
 let lastDistrict=-1,areaT=0,fpsN=0,fpsT=0;
 function updateHud(dt){
   $('hClock').textContent=clock();$('hWx').textContent=`${S.wx.kind} ${Math.round(S.wx.temp)}°`;
-  $('hpFill').style.width=S.hp+'%';$('hpFill').style.background=S.hp>50?'#6fd08c':S.hp>25?'#ffd35c':'#ff4d5e';$('stFill').style.width=S.st+'%';
+  const hpP=S.hp/S.maxHp*100;$('hpFill').style.width=hpP+'%';$('hpFill').style.background=hpP>50?'#6fd08c':hpP>25?'#ffd35c':'#ff4d5e';$('stFill').style.width=(S.st/S.maxSt*100)+'%';
   const d=districtAt(heroPos.x,heroPos.z);if(d.i!==lastDistrict){lastDistrict=d.i;$('areaName').textContent=d.zh;$('areaSub').textContent=d.en;if(!S.veh){$('area').classList.add('on');areaT=4}}
   if(areaT>0){areaT-=dt;if(areaT<=0)$('area').classList.remove('on')}
   if(S.mode==='gps'&&!$('sheetSys').hidden){
@@ -2448,6 +2546,8 @@ let last=performance.now(),actT=0,ctxT=0,hudT=0,miniT=0;
 function frame(now){
   const dt=Math.min(.05,(now-last)/1000);last=now;
   fpsN++;fpsT+=dt;if(fpsT>=.5){$('fps').textContent=Math.round(fpsN/fpsT)+' FPS';fpsN=0;fpsT=0}
+  if(!S.started&&S.selecting){heroYaw=Math.PI/2;poseHero(dt,0,false);const tx=heroPos.x+4.2,tz=heroPos.z+.3;camera.position.set(tx,1.9,tz);camera.lookAt(heroPos.x,1.45,heroPos.z+(portrait?0:1.6));
+    updateEnv(dt*.2);updateLights(dt);updateTraffic(dt);updatePeds(dt,now);cullChunks();renderPeople();renderer.render(scene,camera);requestAnimationFrame(frame);return}
   if(!S.started){camYaw+=dt*.03;updateCamera(dt);updateEnv(dt*.2);updateLights(dt);updateTraffic(dt);updatePeds(dt,now);streamChunks(heroPos);cullChunks();renderPeople();renderer.render(scene,camera);requestAnimationFrame(frame);return}
   if(!S.paused){
     let ix=input.x,iy=input.y;
@@ -2456,7 +2556,7 @@ function frame(now){
     const il=Math.hypot(ix,iy);if(il>1){ix/=il;iy/=il}
     if(S.dead){ix=iy=0}
     const sprint=keys['shift']||S.run||S.stickRun;
-    if(S.boost>0){S.boost-=dt;S.st=100}
+    if(S.boost>0){S.boost-=dt;S.st=S.maxSt}
     updateLights(dt);
     if(S.mode==='gps')gpsStep(dt,ix,iy);
     if(S.veh){driveVehicle(S.veh,dt,iy,ix,keys[' ']||S.hbTouch);heroPos.x=S.veh.x;heroPos.z=S.veh.z;placeRider();updateSpeedo();jumpQ=false}
@@ -2474,7 +2574,7 @@ function frame(now){
     for(let k=tracers.length-1;k>=0;k--){const t=tracers[k];t.t-=dt;t.l.material.opacity=Math.max(0,t.t/.14);if(t.t<=0){scene.remove(t.l);t.l.geometry.dispose();t.l.material.dispose();tracers.splice(k,1)}}
     flash.intensity=Math.max(0,flash.intensity-dt*30);
     const hu=$('hurt'),ho=+hu.style.opacity||0;if(ho>0)hu.style.opacity=Math.max(0,ho-dt*1.6);
-    if(!S.dead&&S.hp<100&&now-S.lastHurt>5000)S.hp=Math.min(100,S.hp+3*dt);
+    if(!S.dead&&S.hp<S.maxHp&&now-S.lastHurt>(S.nurse?2000:5000))S.hp=Math.min(S.maxHp,S.hp+3*S.regen*dt);
     updateEnv(dt);
     hudT+=dt;if(hudT>.2){hudT=0;updateHud(.2)}
   }
@@ -2495,7 +2595,7 @@ function startGame(){
   if(IS_TOUCH&&innerWidth<innerHeight)setTimeout(()=>toast('橫放手機體驗更佳','info',3500),2400);
   setTimeout(()=>{if(S.story===0&&!mission)mission1()},1800);
 }
-$('bStart').onclick=startGame;
+$('bStart').onclick=openChars;
 markSeg('segQ','q',quality);markSeg('segS','s',S.sens);
 applyQuality();resize();
 renderMoney();renderStars();setWeapon('fist');
