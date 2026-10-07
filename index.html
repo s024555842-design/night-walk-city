@@ -609,6 +609,9 @@ body.indoor #tAtk,body.indoor #tWpn,body.indoor #tRel,body.indoor #tRun,body.ind
     <div class="ctrl"><span class="key">W / S</span>油門 / 煞車・倒車（手機：右側 ▲▼）<span class="key">A / D</span>轉向（手機：左側 ◀▶）<span class="key">Space</span>手煞車（甩尾）<span class="key">H</span>喇叭<span class="key">F</span>下車</div>
     <h3>捷運</h3>
     <div class="ctrl"><span class="key">E</span>在捷運站入口選路線進站（NT$20）<span class="key">F</span>列車停靠時上車，到站後下車<span class="key">E</span>在月台上出站回到街上</div>
+    <h3>郊外・地形</h3>
+    <div class="ctrl"><span class="key">走路</span>太陡的坡爬不上去；從高處摔下來會受傷，掉進水裡沒事<span class="key">水</span>水深會自動游泳，車子不能下水<span class="key">E</span>在水邊釣魚（要先買釣竿）、和各地的人交談、敲鐘</div>
+    <p class="note">市區是平的盆地，四周有陽明山、象山斷崖、碧潭、翡翠水庫和西郊盆地的營區；大地圖上的土色線是通往各地的土路。</p>
     <h3>賭場</h3>
     <div class="ctrl"><span class="key">E</span>在信義區「金虎賭場」門口進場；場內走到機台或牌桌旁按 E 坐下來玩<span class="key">Esc</span>離開牌桌</div>
     <p class="note">拉霸、小鋼珠、21 點、比大小、德州撲克、骰寶，用的都是遊戲裡的現金。搭淡水信義線到「台北101/世貿」站最近。</p>
@@ -684,14 +687,18 @@ const angDiff=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b));
 
 /* ---------- cell types & POIs (deterministic, like tiles from a server) ---------- */
 const T101={ix:12,iz:1};
-const FORCED={'2,1':'market','-2,1':'temple','1,-3':'park','13,0':'casino'};
+const FORCED={'2,1':'market','-2,1':'temple','1,-3':'park','13,0':'casino','4,3':'mall','10,-1':'bar'};
+/* the street grid ends here; beyond it is open country (see the terrain part) */
+const CITY={x0:-10,x1:19,z0:-17,z1:12};
+const CX0=CITY.x0*CELL-10,CX1=CITY.x1*CELL+10,CZ0=CITY.z0*CELL-10,CZ1=CITY.z1*CELL+10;
 const typeCache=new Map();
 function cellType(ix,iz){
+  if(ix<CITY.x0||ix>=CITY.x1||iz<CITY.z0||iz>=CITY.z1)return 'wild';
   const k=ix+','+iz;let t=typeCache.get(k);if(t)return t;
   if(ix===T101.ix&&iz===T101.iz)t='tower';
   else if(FORCED[k])t=FORCED[k];
   else if(Math.abs(ix)<=1&&Math.abs(iz)<=1)t='block';
-  else{const r=rng(hash(ix,iz,3))();t=r<.06?'park':r<.1?'market':r<.13?'temple':'block'}
+  else{const r=rng(hash(ix,iz,3))();t=r<.06?'park':r<.1?'market':r<.13?'temple':'block';if(t==='park'&&rng(hash(ix,iz,61))()<.3)t='hill'}
   typeCache.set(k,t);return t;
 }
 const MRT_NAMES=['台北車站','西門','龍山寺','中山','雙連','民權西路','忠孝復興','忠孝敦化','國父紀念館','市政府','象山','大安','科技大樓','六張犁','古亭','東門','善導寺','松江南京','南京復興','小巨蛋','行天宮','圓山','公館','台電大樓','劍潭','北門','大橋頭','中正紀念堂'];
@@ -709,6 +716,9 @@ const POI_META={
   temple:{name:'廟宇',col:'#ff6b4a',hex:0xd9432e,ch:'廟'},
   landmark:{name:'臺北101',col:'#9fe7d8',hex:0x9fe7d8,ch:'101'},
   casino:{name:'金虎賭場',col:'#ffd35c',hex:0xffd35c,ch:'賭'},
+  mall:{name:'好市集量販',col:'#7fd0ff',hex:0x7fd0ff,ch:'賣'},bar:{name:'夜貓酒吧',col:'#ff8fd0',hex:0xff8fd0,ch:'酒'},
+  camp:{name:'西郊營區',col:'#b6c97a',hex:0xb6c97a,ch:'營'},dam:{name:'翡翠水庫',col:'#7fc4f0',hex:0x7fc4f0,ch:'庫'},lake:{name:'碧潭',col:'#7fc4f0',hex:0x7fc4f0,ch:'湖'},
+  mtemple:{name:'竹林禪寺',col:'#ff9a6a',hex:0xff9a6a,ch:'寺'},view:{name:'象山觀景台',col:'#9fe7d8',hex:0x9fe7d8,ch:'景'},peak:{name:'陽明山頂',col:'#d8dde6',hex:0xd8dde6,ch:'峰'},
 };
 /* ---------- metro network (station names and line shapes follow Taipei MRT, laid onto the road grid) ---------- */
 const METRO_LINES=[
@@ -753,10 +763,13 @@ function poiAt(ix,iz){
   const k=ix+','+iz;if(poiCache.has(k))return poiCache.get(k);
   if(stationCell.has(k)){const sp=stationCell.get(k);poiCache.set(k,sp);return sp}
   const t=cellType(ix,iz);let p=null;const cx=ix*CELL+CELL/2,cz=iz*CELL+CELL/2;
+  if(t==='wild'){p=WILD_POI.get(k)||null;poiCache.set(k,p);return p}
   if(t==='market')p={type:'market',name:pick(MARKET_NAMES,rng(hash(ix,iz,31))),x:cx,z:cz};
   else if(t==='temple')p={type:'temple',name:pick(TEMPLE_NAMES,rng(hash(ix,iz,32))),x:cx,z:iz*CELL+20};
   else if(t==='tower')p={type:'landmark',name:'臺北101',x:cx,z:iz*CELL+8.5};
   else if(t==='casino')p={type:'casino',x:cx,z:iz*CELL+44.5};
+  else if(t==='mall')p={type:'mall',x:cx,z:iz*CELL+13};
+  else if(t==='bar')p={type:'bar',x:cx,z:iz*CELL+13};
   else if(t==='block'&&!(ix===0&&iz===0)){
     const r=rng(hash(ix,iz,7))();const b={x:cx,z:iz*CELL+8.5};
     if(r<.075)p={...b,type:'shop'};else if(r<.095)p={...b,type:'gun'};else if(r<.135)p={...b,type:'ubike'};
@@ -784,9 +797,20 @@ function cellObs(ix,iz){
   else if(t==='temple'){o.push([x0+17,z0+27,x0+43,z0+47]);o.push([x0+28.5,z0+17.5,x0+31.5,z0+20.5])}
   else if(t==='tower')o.push([x0+16,z0+16,x0+44,z0+44]);
   else if(t==='casino')o.push([x0+14,z0+13,x0+46,z0+42]);
+  else if(t==='mall')o.push([x0+13,z0+24,x0+47,z0+49]);
+  else if(t==='bar')o.push([x0+21.5,z0+38.2,x0+38.5,z0+47]);
+  else if(t==='park'){const pd=pondAt(ix,iz);if(pd)o.push([pd.x-pd.r*.82,pd.z-pd.r*.82,pd.x+pd.r*.82,pd.z+pd.r*.82])}
   obsCache.set(k,o);return o;
 }
+/* some parks have a pond in the middle */
+const pondCache=new Map();
+function pondAt(ix,iz){
+  const k=ix+','+iz;let p=pondCache.get(k);if(p!==undefined)return p;p=null;
+  if(cellType(ix,iz)==='park'&&!FORCED[k]){const r=rng(hash(ix,iz,62));if(r()<.6)p={x:ix*CELL+26+r()*8,z:iz*CELL+27+r()*6,r:7+r()*2.5}}
+  pondCache.set(k,p);return p;
+}
 function walkable(x,z){
+  if(x<CX0||x>CX1||z<CZ0||z>CZ1)return wildWalkable(x,z);
   if(Math.min(dGrid(x),dGrid(z))<=WALK)return true;
   const ix=Math.floor(x/CELL),iz=Math.floor(z/CELL);const t=cellType(ix,iz);
   if(t==='block')return false;
@@ -801,7 +825,7 @@ function snapWalk(p){
   return p;
 }
 const DISTRICTS=[['大同區','DATONG'],['中山區','ZHONGSHAN'],['松山區','SONGSHAN'],['萬華區','WANHUA'],['中正區','ZHONGZHENG'],['信義區','XINYI'],['萬華南機場','NANJICHANG'],['大安區',"DA'AN"],['文山區','WENSHAN']];
-function districtAt(x,z){const gx=clamp(Math.floor((x+300)/600)+1,0,2),gz=clamp(Math.floor((z+300)/600)+1,0,2);const d=DISTRICTS[gz*3+gx];return {zh:d[0],en:d[1],i:gz*3+gx}}
+function districtAt(x,z){if(!inCity(x,z))return areaAt(x,z);const gx=clamp(Math.floor((x+300)/600)+1,0,2),gz=clamp(Math.floor((z+300)/600)+1,0,2);const d=DISTRICTS[gz*3+gx];return {zh:d[0],en:d[1],i:gz*3+gx}}
 
 /* ---------- renderer & scene ---------- */
 const canvas=$('scene');
@@ -913,7 +937,7 @@ const MAT={
   plaza:new THREE.MeshLambertMaterial({color:0xffffff}),
   stall:new THREE.MeshLambertMaterial({color:0xffffff}),awn:new THREE.MeshLambertMaterial({color:0xffffff}),
   lantern:new THREE.MeshBasicMaterial({color:0xff3b30}),ring:new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.85}),
-  mrt:new THREE.MeshLambertMaterial({color:0x9cc9d6,transparent:true,opacity:.75}),mrtRoof:M(0x2f8f7a),
+  mrt:new THREE.MeshLambertMaterial({color:0x9cc9d6,transparent:true,opacity:.75}),mrtRoof:M(0x2f8f7a),pond:M(0x2f86c8),
 };
 
 /* ---------- ground (one texture tile = one 60 m cell) ---------- */
@@ -935,9 +959,11 @@ const gt=cvs(1024,1024,(g,W)=>{
   for(const e of [0,CELL]){for(let k=-ROAD+.5;k<ROAD;k+=1.1){Y(ROAD+.8,e+k,3,.55);Y(CELL-ROAD-3.8,e+k,3,.55);Y(e+k,ROAD+.8,.55,3);Y(e+k,CELL-ROAD-3.8,.55,3)}}
   Y(ROAD+4.3,.3,.35,ROAD-.5);Y(CELL-ROAD-4.65,CELL-ROAD+.2,.35,ROAD-.5);Y(CELL-ROAD+.2,ROAD+4.3,ROAD-.5,.35);Y(.3,CELL-ROAD-4.65,ROAD-.5,.35);
 });
-gt.repeat.set(40,40);
-const ground=new THREE.Mesh(new THREE.PlaneGeometry(CELL*40,CELL*40),new THREE.MeshLambertMaterial({map:gt}));
-ground.rotation.x=-Math.PI/2;scene.add(ground);
+/* one fixed plane under the whole street grid; UVs follow world metres so every cell gets one tile */
+const groundGeo=new THREE.PlaneGeometry(CX1-CX0,CZ1-CZ0);
+{const P=groundGeo.attributes.position,U=groundGeo.attributes.uv,mx=(CX0+CX1)/2,mz=(CZ0+CZ1)/2;for(let i=0;i<P.count;i++)U.setXY(i,(mx+P.getX(i))/CELL,(P.getY(i)-mz)/CELL)}
+const ground=new THREE.Mesh(groundGeo,new THREE.MeshLambertMaterial({map:gt}));
+ground.rotation.x=-Math.PI/2;ground.position.set((CX0+CX1)/2,0,(CZ0+CZ1)/2);scene.add(ground);
 
 /* ---------- instanced collector ---------- */
 const _m=new THREE.Matrix4(),_q=new THREE.Quaternion(),_p=new THREE.Vector3(),_s=new THREE.Vector3(),_e=new THREE.Euler(),_c=new THREE.Color();
@@ -1018,10 +1044,15 @@ function buildBlock(B,g,ix,iz,r){
 function buildOpen(B,g,ix,iz,t,r){
   const x0=ix*CELL,z0=iz*CELL;
   const cx=x0+CELL/2,cz=z0+CELL/2,S=CELL-2*WALK;
-  const plazaCol=t==='park'?'#6f9a58':t==='market'?'#9a6a5a':t==='temple'?'#b7aa98':t==='casino'?'#4a3a40':'#c2c6cc';
+  const plazaCol=t==='park'||t==='hill'?'#6f9a58':t==='market'?'#9a6a5a':t==='temple'?'#b7aa98':t==='casino'?'#4a3a40':t==='mall'?'#8c9099':t==='bar'?'#6b5236':'#c2c6cc';
   B.add('plaza',planeG,MAT.plaza,cx,.04,cz,S,1,S,0,plazaCol);
+  if(t==='hill')buildHill(B,g,ix,iz,r);
+  if(t==='mall')buildMall(B,g,ix,iz,r);
+  if(t==='bar')buildBar(B,g,ix,iz,r);
   if(t==='park'){
-    for(let k=0;k<14;k++){const tx=x0+WALK+3+r()*(S-6),tz=z0+WALK+3+r()*(S-6),s=2+r()*1.6;
+    const pd=pondAt(ix,iz);
+    if(pd){B.add('pondrim',CG(1,1,.3,20),MAT.pole,pd.x,.15,pd.z,pd.r+.9,1,pd.r+.9);B.add('pond',CG(1,1,.1,20),MAT.pond,pd.x,.33,pd.z,pd.r,1,pd.r)}
+    for(let k=0;k<14;k++){const tx=x0+WALK+3+r()*(S-6),tz=z0+WALK+3+r()*(S-6),s=2+r()*1.6;if(pd&&Math.hypot(tx-pd.x,tz-pd.z)<pd.r+2.5)continue;
       B.add('leaf',icoG,MAT.leaf,tx,3.4+s*.6,tz,s,s*1.1,s,r()*6,pick(['#3f7d3a','#4f8f3f','#2f6b3a'],r));B.add('box',UNIT,MAT.box,tx,1.3,tz,.45,2.6,.45,0,'#5a4636')}
   }
   if(t==='market'){
@@ -1096,18 +1127,20 @@ function buildChunk(cx,cz){
   const g=new THREE.Group(),B=new Batch();
   for(let a=0;a<CH;a++)for(let b=0;b<CH;b++){
     const ix=cx*CH+a,iz=cz*CH+b;const r=rng(hash(ix,iz,1));const t=cellType(ix,iz);
-    if(t==='block')buildBlock(B,g,ix,iz,r);else buildOpen(B,g,ix,iz,t,r);
-    streetFurniture(B,ix,iz,r);
+    if(t==='block')buildBlock(B,g,ix,iz,r);else if(t!=='wild'){buildOpen(B,g,ix,iz,t,r)}
+    if(t!=='wild')streetFurniture(B,ix,iz,r);
     const p=poiAt(ix,iz);
     if(p){
       const meta=POI_META[p.type];
       if(p.type==='mrt'){const ex=p.x+p.ex*6;const e=new THREE.Mesh(BG(4.2,2.8,3.2),MAT.mrt);e.position.set(ex,1.4,p.z);g.add(e);const rf=new THREE.Mesh(BG(4.8,.3,3.8),MAT.mrtRoof);rf.position.set(ex,2.95,p.z);g.add(rf)}
       if(p.type==='hospital'||p.type==='police'){const s=new THREE.Mesh(BG(8,1.6,.3),BM(p.type==='hospital'?0xffffff:0x2d4fb8));s.position.set(p.x,6,p.z-1.9);g.add(s)}
-      if(!['market','temple','landmark','casino'].includes(p.type))B.add('ring',ringG,MAT.ring,p.x,.06,p.z,1,1,1,0,meta.col);
-      const lb=label(p.name,meta.col);lb.position.set(p.x,p.type==='market'?7:p.type==='temple'?11:5.4,p.z);g.add(lb);
+      const py=t==='wild'?heightAt(p.x,p.z):0;
+      if(!['market','temple','landmark','casino'].includes(p.type))B.add('ring',ringG,MAT.ring,p.x,py+(t==='wild'?.25:.06),p.z,1,1,1,0,meta.col);
+      const lb=label(p.name,meta.col);lb.position.set(p.x,py+(p.type==='market'?7:p.type==='temple'||p.type==='mtemple'?11:5.4),p.z);g.add(lb);
     }
   }
-  const det=new THREE.Group();g.add(det);g.userData.det=det;B.build(g,det);g.userData.box=new THREE.Box3(new THREE.Vector3(cx*CH*CELL-20,0,cz*CH*CELL-20),new THREE.Vector3((cx+1)*CH*CELL+20,160,(cz+1)*CH*CELL+20));scene.add(g);return g;
+  const top=buildTerrain(g,B,cx,cz);
+  const det=new THREE.Group();g.add(det);g.userData.det=det;B.build(g,det);g.userData.box=new THREE.Box3(new THREE.Vector3(cx*CH*CELL-20,-12,cz*CH*CELL-20),new THREE.Vector3((cx+1)*CH*CELL+20,Math.max(160,top+25),(cz+1)*CH*CELL+20));scene.add(g);return g;
 }
 const frustum=new THREE.Frustum(),_pm=new THREE.Matrix4();
 function cullChunks(){camera.updateMatrixWorld();_pm.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);frustum.setFromProjectionMatrix(_pm);chunks.forEach(g=>{g.visible=frustum.intersectsBox(g.userData.box);if(g.visible)g.userData.det.visible=g.userData.box.distanceToPoint(camera.position)<(quality==='high'?120:quality==='mid'?80:45)})}
@@ -1121,7 +1154,6 @@ function streamChunks(p,force){
   }
   let n=force?99:1;
   while(buildQueue.length&&n-->0){const k=buildQueue.shift();if(chunks.has(k))continue;const [x,z]=k.split(',').map(Number);chunks.set(k,buildChunk(x,z))}
-  ground.position.set(Math.round(p.x/CELL)*CELL,0,Math.round(p.z/CELL)*CELL);
 }
 
 /* ---------- landmarks visible from anywhere ---------- */
@@ -1279,7 +1311,7 @@ let cdLast='';
 function updateCountdown(p){
   const gx=Math.round(p.x/CELL)*CELL,gz=Math.round(p.z/CELL)*CELL;
   const ax=Math.abs(p.x-gx)<Math.abs(p.z-gz)?'NS':'EW';
-  cdSprite.position.set(gx+7,6.4,gz+7);
+  cdSprite.position.set(gx+7,6.4,gz+7);cdSprite.visible=inCity(p.x,p.z);
   const st=lightState(ax),n=Math.ceil(lightLeft(ax));const k=st+n;if(k===cdLast)return;cdLast=k;
   const g=cdCanvas.getContext('2d');g.clearRect(0,0,128,64);g.fillStyle='#111';g.fillRect(4,4,120,56);
   g.fillStyle=st==='G'?'#33ff88':st==='Y'?'#ffcc33':'#ff3344';g.font='700 40px "IBM Plex Mono",monospace';g.textAlign='center';g.textBaseline='middle';g.fillText(String(n).padStart(2,'0'),64,34);cdTex.needsUpdate=true;
@@ -1289,7 +1321,8 @@ function updateCountdown(p){
 class Walker{
   constructor(ix,iz,speed,lane,obey){this.a=[ix,iz];this.b=[ix+1,iz];this.t=Math.random();this.speed=speed;this.base=speed;this.lane=lane;this.obey=obey;this.target=null;this.bias=.5;this.pos={x:0,z:0};this.dir={x:1,z:0};this.limit=2;this.cur=0;this.pick(null)}
   pick(prev){
-    const [x,z]=this.a;const opts=[[1,0],[-1,0],[0,1],[0,-1]].filter(d=>!prev||!(x+d[0]===prev[0]&&z+d[1]===prev[1]));
+    const [x,z]=this.a;const inb=d=>x+d[0]>=CITY.x0&&x+d[0]<=CITY.x1&&z+d[1]>=CITY.z0&&z+d[1]<=CITY.z1;
+    let opts=[[1,0],[-1,0],[0,1],[0,-1]].filter(d=>inb(d)&&(!prev||!(x+d[0]===prev[0]&&z+d[1]===prev[1])));if(!opts.length)opts=[[1,0],[-1,0],[0,1],[0,-1]].filter(inb);
     let d=opts[(Math.random()*opts.length)|0];
     if(this.target&&Math.random()<this.bias){let best=-1e9;for(const o of opts){const s=(this.target.x-x*CELL)*o[0]+(this.target.z-z*CELL)*o[1];if(s>best){best=s;d=o}}}
     this.b=[x+d[0],z+d[1]];
@@ -1307,7 +1340,7 @@ class Walker{
   }
   placeNear(p,minD,maxD){
     for(let k=0;k<30;k++){const ang=Math.random()*6.283,d=minD+Math.random()*(maxD-minD);
-      const ix=Math.round((p.x+Math.cos(ang)*d)/CELL),iz=Math.round((p.z+Math.sin(ang)*d)/CELL);
+      const ix=clamp(Math.round((p.x+Math.cos(ang)*d)/CELL),CITY.x0,CITY.x1),iz=clamp(Math.round((p.z+Math.sin(ang)*d)/CELL),CITY.z0,CITY.z1);
       const q={x:ix*CELL,z:iz*CELL};if(hyp(q,p)>=minD){this.a=[ix,iz];this.t=Math.random()*.7;this.pick(null);this.update(0);return}}
   }
 }
@@ -1322,6 +1355,288 @@ function queueVehicles(list,player,playerVeh){
     const wid=playerVeh?2.4:1.4;
     if(lat<wid&&s>w.t&&s-w.t<11/CELL){w.limit=Math.min(w.limit,s-(playerVeh?5.5:3.5)/CELL);w.blockedBy=(w.blockedBy||0)+1}else w.blockedBy=0;
   }
+}
+
+
+/* ================= terrain: the land around the city ================= */
+/* The street grid is flat (臺北盆地). Outside it the ground is a height field sampled on a 10 m grid:
+   rolling hills, 陽明山 to the north, 象山 and its cliff to the east, 碧潭 and 翡翠水庫 to the south, a walled basin to the west. */
+const TG=10;
+const sstep=(a,b,v)=>{const t=clamp((v-a)/(b-a),0,1);return t*t*(3-2*t)};
+function vnoise(x,z,seed){
+  const xi=Math.floor(x),zi=Math.floor(z),fx=x-xi,fz=z-zi,u=fx*fx*(3-2*fx),v=fz*fz*(3-2*fz);
+  const h=(a,b)=>{let n=Math.imul(a,374761393)+Math.imul(b,668265263)+Math.imul(seed,1442695041)|0;n=Math.imul(n^(n>>>13),1274126177);return ((n^(n>>>16))>>>0)/4294967296};
+  return (h(xi,zi)*(1-u)+h(xi+1,zi)*u)*(1-v)+(h(xi,zi+1)*(1-u)+h(xi+1,zi+1)*u)*v;
+}
+const fbm=(x,z,seed)=>vnoise(x,z,seed)*.55+vnoise(x*2.1,z*2.1,seed+7)*.3+vnoise(x*4.3,z*4.3,seed+13)*.15;
+const inCity=(x,z)=>x>=CX0&&x<=CX1&&z>=CZ0&&z<=CZ1;
+function cityDist(x,z){const dx=Math.max(CX0-x,0,x-CX1),dz=Math.max(CZ0-z,0,z-CZ1);return Math.hypot(dx,dz)}
+const WORLD_EDGE=740;
+const LAND={
+  yang:{x:250,z:-1560,r:330,h:210},
+  terr:{x:250,z:-1240,r:44,h:38},
+  xiang:{x:1345,z:60,r:170,h:64},view:{x:1402,z:60,r:16,h:58},cliffX:1422,
+  lake:{x:150,z:985,r:120,y:1.4},
+  res:{x:900,z:1010,r:92,y:11,crest:13.5},
+  basin:{x:-905,z:-100,r:125,floor:1.2,rim:25},
+};
+/* dirt tracks from the edge of town to each place: [x1,z1,x2,z2,half width] */
+const PATHS=[[CX0,-100,-790,-100,9],[250,CZ0,250,-1196,7],[900,CZ1,900,888,8],[150,CZ1,150,872,7],[CX1,60,1386,60,6]];
+let _use=0;
+/* land use codes: 0 grass, 1 track, 2 basin floor, 3 stone terrace, 4 dam crest, 5 shore */
+function landBase(x,z){
+  _use=0;const L=LAND,d=cityDist(x,z),ramp=sstep(0,140,d),far=sstep(330,780,d);
+  let h=ramp*(3+15*fbm(x/170,z/170,1))+far*(35+150*fbm(x/420,z/420,5));
+  let q=Math.hypot(x-L.yang.x,z-L.yang.z)/L.yang.r;h+=ramp*L.yang.h*Math.exp(-2.2*q*q);
+  q=Math.hypot(x-L.xiang.x,z-L.xiang.z)/L.xiang.r;h+=ramp*L.xiang.h*Math.exp(-2.2*q*q);
+  /* 西郊盆地: flat floor ringed by a ridge, with a gap on the city side */
+  {const B=L.basin,dx=x-B.x,dz=z-B.z,r=Math.hypot(dx,dz);
+    if(r<300){const pass=sstep(.42,.2,Math.abs(Math.atan2(dz,dx))),rim=B.rim*(1-pass)+2.2*pass;
+      const t=B.floor+(rim-B.floor)*sstep(B.r,B.r+55,r);h+=(t-h)*sstep(300,220,r);if(r<B.r+4)_use=2}}
+  /* 碧潭: a bowl that dips below the water line */
+  {const K=L.lake,r=Math.hypot(x-K.x,z-K.z);
+    if(r<200){const t=1.9-7.5*sstep(K.r,K.r*.35,r);h+=(t-h)*sstep(200,K.r+8,r);if(r<K.r+6&&h<K.y+.5)_use=5}}
+  /* 翡翠水庫: water held behind a ring crest; the side facing the city is the dam */
+  {const R=L.res,dx=x-R.x,dz=z-R.z,r=Math.hypot(dx,dz);
+    if(r<220){const north=sstep(.75,.45,Math.abs(Math.atan2(dx,-dz)));
+      const t=r<80?-2+9*r/80:r<104?7+(R.crest-7)*sstep(80,104,r):R.crest;
+      h+=(t-h)*sstep(215-63*north,126,r);
+      if(r>=103&&r<=127)_use=north>.5?4:1;else if(r<103&&h<R.y+.5)_use=5}}
+  /* flat ground for 竹林禪寺 and the 象山 lookout */
+  for(const T of [L.terr,L.view]){const r=Math.hypot(x-T.x,z-T.z);if(r<T.r+30){h+=(T.h-h)*sstep(T.r+30,T.r,r);if(r<T.r+3)_use=3}}
+  /* 象山斷崖: the far side drops away */
+  {const cut=34*sstep(L.cliffX-5,L.cliffX+5,x)*sstep(170,100,Math.abs(z-L.xiang.z));if(cut>0)h=Math.max(h-cut,.5)}
+  return h;
+}
+function landRaw(x,z){
+  if(inCity(x,z)){
+    _use=0;const ix=Math.floor(x/CELL),iz=Math.floor(z/CELL);if(cellType(ix,iz)!=='hill')return 0;
+    const u=(x-ix*CELL-WALK)/(CELL-2*WALK),v=(z-iz*CELL-WALK)/(CELL-2*WALK);if(u<=0||u>=1||v<=0||v>=1)return 0;
+    return (7+2.5*rng(hash(ix,iz,63))())*Math.sin(Math.PI*u)*Math.sin(Math.PI*v);
+  }
+  let h=landBase(x,z),use=_use;
+  for(const p of PATHS){
+    const ax=p[2]-p[0],az=p[3]-p[1],l2=ax*ax+az*az,t=clamp(((x-p[0])*ax+(z-p[1])*az)/l2,0,1),px=p[0]+ax*t,pz=p[1]+az*t,dist=Math.hypot(x-px,z-pz);
+    if(dist<p[4]+14){const w=sstep(p[4]+14,p[4],dist);if(dist>.01)h+=(landBase(px,pz)-h)*w;if(w>.6&&use===0)use=1}
+  }
+  _use=use;return h;
+}
+/* heights are cached per grid point so the mesh, the physics and the map all agree */
+const HG=new Map(),UG=new Map();
+function hG(i,j){const k=(i+8192)*16384+(j+8192);let h=HG.get(k);if(h===undefined){h=landRaw(i*TG,j*TG);HG.set(k,h);UG.set(k,_use)}return h}
+function uG(i,j){hG(i,j);return UG.get((i+8192)*16384+(j+8192))}
+function heightAt(x,z){
+  if(x>CX0&&x<CX1&&z>CZ0&&z<CZ1&&cellType(Math.floor(x/CELL),Math.floor(z/CELL))!=='hill')return 0;
+  const gx=x/TG,gz=z/TG,i=Math.floor(gx),j=Math.floor(gz),fx=gx-i,fz=gz-j;
+  const a=hG(i,j),b=hG(i+1,j),c=hG(i,j+1),d=hG(i+1,j+1);
+  return fx+fz<=1?a+(b-a)*fx+(c-a)*fz:d+(c-d)*(1-fx)+(b-d)*(1-fz);
+}
+/* ---------- water ---------- */
+const WATERS=[{x:LAND.lake.x,z:LAND.lake.z,r:122,y:LAND.lake.y,name:'碧潭'},{x:LAND.res.x,z:LAND.res.z,r:100,y:LAND.res.y,name:'翡翠水庫'}];
+function waterAt(x,z){for(const w of WATERS){const dx=x-w.x,dz=z-w.z;if(dx*dx+dz*dz<w.r*w.r)return w}return null}
+function waterDepth(x,z){if(x>CX0&&x<CX1&&z>CZ0&&z<CZ1)return 0;const w=waterAt(x,z);return w?w.y-heightAt(x,z):0}
+const waterMat=new THREE.MeshLambertMaterial({color:0x2f86c8,transparent:true,opacity:.8,depthWrite:false});
+for(const w of WATERS){const m=new THREE.Mesh(new THREE.CircleGeometry(w.r,48),waterMat);m.rotation.x=-Math.PI/2;m.position.set(w.x,w.y,w.z);m.renderOrder=1;scene.add(m)}
+/* ---------- walking and driving off the grid ---------- */
+const WOBS=[];
+function wildWalkable(x,z){
+  if(cityDist(x,z)>WORLD_EDGE)return false;
+  for(let i=0;i<WOBS.length;i++){const r=WOBS[i];if(x>r[0]&&x<r[2]&&z>r[1]&&z<r[3])return false}
+  return true;
+}
+const AREAS=[['陽明山','YANGMINGSHAN'],['象山','XIANGSHAN'],['翡翠水庫','FEITSUI RESERVOIR'],['碧潭','BITAN'],['西郊盆地','WEST BASIN'],['郊外','OUTSKIRTS']];
+function areaAt(x,z){
+  const L=LAND;let k=5;
+  if(Math.hypot(x-L.res.x,z-L.res.z)<240)k=2;else if(Math.hypot(x-L.lake.x,z-L.lake.z)<230)k=3;else if(Math.hypot(x-L.basin.x,z-L.basin.z)<300)k=4;
+  else if(Math.hypot(x-L.xiang.x,z-L.xiang.z)<260)k=1;else if(z<CZ0&&Math.abs(x-L.yang.x)<620)k=0;
+  return {zh:AREAS[k][0],en:AREAS[k][1],i:9+k};
+}
+/* map colours */
+function landHex(x,z){
+  const h=heightAt(x,z),w=waterAt(x,z);if(w&&h<w.y)return '#3476b4';
+  return h<3?'#56804c':h<14?'#4b7446':h<40?'#40663f':h<90?'#37563a':h<160?'#4a5547':'#6b6a62';
+}
+
+/* ---------- terrain mesh, one per chunk ---------- */
+const LAND_COL=[null,0x6a5d46,0x6f6b47,0x76726b,0x85837e,0x9a8e6e];
+const _lc=new THREE.Color();
+function landVert(pos,col,i,j,steep){
+  const x=i*TG,z=j*TG,h=hG(i,j),u=uG(i,j),c=_lc;pos.push(x,h,z);
+  if(u)c.setHex(LAND_COL[u]);else if(steep)c.setHex(0x7a746a);
+  else{const n1=vnoise(x/37,z/37,3),hi=sstep(60,150,h);c.setRGB(.30+.10*n1-.06*hi,.50+.10*n1-.14*hi,.25+.06*n1-.02*hi)}
+  const w=waterAt(x,z);if(w&&h<w.y-.6)c.multiplyScalar(.6);
+  col.push(c.r,c.g,c.b);return h;
+}
+/* two triangles split along the same diagonal heightAt() uses */
+function landQuad(pos,col,i,j){
+  const hA=hG(i,j),hB=hG(i+1,j),hC=hG(i,j+1),hD=hG(i+1,j+1);
+  const s1=Math.hypot(hB-hA,hC-hA)>TG*.95,s2=Math.hypot(hD-hC,hD-hB)>TG*.95;
+  landVert(pos,col,i,j,s1);landVert(pos,col,i,j+1,s1);landVert(pos,col,i+1,j,s1);landVert(pos,col,i+1,j,s2);landVert(pos,col,i,j+1,s2);landVert(pos,col,i+1,j+1,s2);
+  return Math.max(hA,hB,hC,hD);
+}
+function landMesh(pos,col){
+  const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));geo.setAttribute('color',new THREE.Float32BufferAttribute(col,3));geo.computeVertexNormals();
+  const m=new THREE.Mesh(geo,vcMat);m.frustumCulled=false;return m;
+}
+function buildTerrain(g,B,cx,cz){
+  const x0=cx*CH*CELL,z0=cz*CH*CELL,span=CH*CELL,n=span/TG;
+  if(x0>=CX0&&x0+span<=CX1&&z0>=CZ0&&z0+span<=CZ1)return 0;
+  const pos=[],col=[],i0=x0/TG,j0=z0/TG;let top=0;
+  for(let a=0;a<n;a++)for(let b=0;b<n;b++){
+    const i=i0+a,j=j0+b,xa=i*TG,za=j*TG;if(xa>=CX0&&xa+TG<=CX1&&za>=CZ0&&za+TG<=CZ1)continue;
+    top=Math.max(top,landQuad(pos,col,i,j));
+  }
+  if(!pos.length)return 0;
+  g.add(landMesh(pos,col));
+  /* trees and rocks, placed from a jittered lattice so they are the same every visit */
+  for(let a=0;a<span;a+=18)for(let b=0;b<span;b+=18){
+    const r=rng(hash(x0+a,z0+b,71)),x=x0+a+r()*14,z=z0+b+r()*14;if(inCity(x,z)||cityDist(x,z)<5)continue;
+    const dens=fbm(x/140,z/140,9);if(r()>dens*1.25-.12)continue;
+    landRaw(x,z);if(_use)continue;const h=heightAt(x,z);
+    if(Math.abs(heightAt(x+3,z)-heightAt(x-3,z))>5||Math.abs(heightAt(x,z+3)-heightAt(x,z-3))>5){if(r()<.5){const s=.8+r()*1.6;B.add('rock',icoG,MAT.leaf,x,h+s*.3,z,s,s*.7,s,r()*6,'#8a857c')}continue}
+    {const w=waterAt(x,z);if(w&&h<w.y+.6)continue}
+    if(h>85||r()<.18){const s=1.5+r()*.9;B.add('pine',coneG,MAT.leaf,x,h+2.2+s*2.2,z,s,s*4.2,s,r()*6,pick(['#2f5a38','#28503a','#356240'],r));B.add('box',UNIT,MAT.box,x,h+1.1,z,.4,2.2,.4,0,'#4a3a2c')}
+    else{const s=1.9+r()*1.7;B.add('leaf',icoG,MAT.leaf,x,h+3.2+s*.6,z,s,s*1.15,s,r()*6,pick(['#3f7d3a','#4f8f3f','#2f6b3a','#5a9a48'],r));B.add('box',UNIT,MAT.box,x,h+1.3,z,.45,2.6,.45,0,'#5a4636')}
+  }
+  return top;
+}
+
+/* ---------- places outside the city (each is two merged meshes: lit and glowing) ---------- */
+const WILD_POI=new Map();
+function wpoi(type,name,x,z){const p={type,name,x,z,ix:Math.floor(x/CELL),iz:Math.floor(z/CELL)};WILD_POI.set(p.ix+','+p.iz,p);return p}
+const SITE={};
+(function buildSites(){
+  const lit=[],glow=[];
+  const sp=(geo,col,x,y,z,ry=0)=>part(geo,col,x,heightAt(x,z)+y,z,0,ry,0);
+  const obs=(x,z,w,d)=>WOBS.push([x-w/2-.4,z-d/2-.4,x+w/2+.4,z+d/2+.4]);
+  const bld=(x,z,w,h,d,col,roof)=>{lit.push(sp(BG(w,h,d),col,x,h/2,z),sp(BG(w+1,.5,d+1),roof,x,h+.25,z));obs(x,z,w,d)};
+
+  /* 西郊營區 */
+  {const cx=LAND.basin.x,cz=LAND.basin.z,ol=0x5a6a3c,dk=0x3e4a2c,cn=0xa8a79c,X0=cx-72,X1=cx+72,Z0=cz-58,Z1=cz+58;
+    const fence=(x1,z1,x2,z2)=>{const len=Math.hypot(x2-x1,z2-z1),ax=Math.abs(x2-x1)>Math.abs(z2-z1),mx=(x1+x2)/2,mz=(z1+z2)/2;
+      for(const y of [1.1,2.1])lit.push(sp(BG(ax?len:.15,.12,ax?.15:len),0x777d70,mx,y,mz));
+      for(let k=0;k<=len+.1;k+=6)lit.push(sp(BG(.25,2.4,.25),0x5b6058,x1+(x2-x1)*k/len,1.2,z1+(z2-z1)*k/len));
+      WOBS.push([Math.min(x1,x2)-.5,Math.min(z1,z2)-.5,Math.max(x1,x2)+.5,Math.max(z1,z2)+.5])};
+    fence(X0,Z0,X1,Z0);fence(X0,Z1,X1,Z1);fence(X0,Z0,X0,Z1);fence(X1,Z0,X1,cz-9);fence(X1,cz+9,X1,Z1);
+    bld(cx-34,cz-44,46,5,10,ol,dk);bld(cx-34,cz-26,46,5,10,ol,dk);bld(cx+40,cz-42,24,8,14,cn,dk);bld(cx+66,cz-14,4,3,4,ol,dk);
+    bld(cx+2,cz+46,6,2.6,8,ol,dk);bld(cx+12,cz+46,6,2.6,8,ol,dk);
+    /* watchtower, flag, helipad */
+    for(const [a,b] of [[-2,-2],[2,-2],[-2,2],[2,2]])lit.push(sp(BG(.4,9,.4),0x5b6058,cx-62+a,4.5,cz+48+b));
+    lit.push(sp(BG(5.4,.3,5.4),dk,cx-62,9.1,cz+48),sp(BG(5,2.4,5),ol,cx-62,10.4,cz+48),sp(BG(6,.4,6),dk,cx-62,11.9,cz+48));obs(cx-62,cz+48,5,5);
+    lit.push(sp(CG(.12,.12,12,6),0xc8ccd0,cx+22,6,cz-22),sp(BG(3.2,1.9,.08),0x2f6b3a,cx+23.7,10.8,cz-22),sp(BG(3.2,.4,.1),0xf4c95d,cx+23.7,10.8,cz-22));
+    lit.push(sp(CG(11,11,.12,24),0x6d6f6a,cx+38,.07,cz+30));glow.push(sp(BG(1,.1,7),0xf2f2f2,cx+35.5,.2,cz+30),sp(BG(1,.1,7),0xf2f2f2,cx+40.5,.2,cz+30),sp(BG(5,.1,1),0xf2f2f2,cx+38,.2,cz+30));
+    /* training ground */
+    for(const hx of [-50,-42,-34])lit.push(sp(BG(4,.15,.15),0xd9a441,cx+hx,1,cz+22),sp(BG(.15,1,.15),0x5b6058,cx+hx-1.9,.5,cz+22),sp(BG(.15,1,.15),0x5b6058,cx+hx+1.9,.5,cz+22));
+    lit.push(sp(BG(5,3,.4),0x6b5a3a,cx-22,1.5,cz+22));
+    for(let k=0;k<6;k++)lit.push(sp(CG(.7,.7,.32,12),0x1d1f22,cx-12+(k%2)*1.5,.17,cz+30+k*1.5));
+    lit.push(sp(BG(7,.1,4),0x4a5a3a,cx-46,.85,cz+44));for(const [a,b] of [[-3.4,-1.9],[3.4,-1.9],[-3.4,1.9],[3.4,1.9]])lit.push(sp(BG(.15,.85,.15),0x5b6058,cx-46+a,.42,cz+44+b));
+    lit.push(sp(BG(8,.3,.3),0x6b5a3a,cx-62,.5,cz+28));
+    for(const [a,b,c] of [[30,-31,0],[31.4,-31,0],[30.6,-31,1],[27,-30,0],[26,-31.2,0]])lit.push(sp(BG(1.2,1,1.2),0x6b6a3a,cx+a,.5+c,cz+b));
+    for(let k=0;k<7;k++)lit.push(sp(BG(1.6,.5,.7),0xa89a72,cx+58+(k%4)*1.7-(k>3?.8:0),.25+(k>3?.5:0),cz+6));
+    SITE.camp={x:cx,z:cz,gate:{x:X1,z:cz},cp:[[cx-50,cz+26],[cx-22,cz+26],[cx-10,cz+40],[cx-46,cz+50],[cx-64,cz+36],[cx-30,cz+8]],
+      sergeant:{x:cx-26,z:cz+6},supply:{x:cx+33,z:cz-28},guard:{x:cx+69,z:cz+7},jeeps:[[cx+52,cz+12],[cx+52,cz+18]]};
+    wpoi('camp','西郊營區',X1+6,cz);
+  }
+  /* 翡翠水庫 */
+  {const R=LAND.res,cx=R.x,cz=R.z,cn=0xb9b7b0;
+    const on=(deg,r)=>({x:cx+r*Math.sin(deg*Math.PI/180),z:cz-r*Math.cos(deg*Math.PI/180)});
+    for(let deg=-40;deg<=40;deg+=8)for(const r of [106,124.5]){const p=on(deg,r);lit.push(sp(BG(r*.14+.4,1.1,.5),cn,p.x,.55,p.z,-deg*Math.PI/180))}
+    for(const deg of [-24,0,24]){const p=on(deg,131);lit.push(sp(BG(3,9,7),0xa5a39c,p.x,-.5,p.z,-deg*Math.PI/180))}
+    /* intake tower and its footbridge */
+    lit.push(part(CG(3,3.4,12,10),cn,cx-30,R.y-3,cz-55),part(BG(5,2.6,5),0x8fa6a2,cx-30,R.y+4.3,cz-55),part(BG(5.6,.3,5.6),0x5d6570,cx-30,R.y+5.8,cz-55),part(BG(1.6,.3,50),0x8c9aa6,cx-30,R.crest+.5,cz-81));
+    const o=on(55,115);bld(o.x,o.z,9,4,7,0xe6e0d6,0x3f6fb0);
+    const valves=[90,180,270].map(deg=>{const p=on(deg,115);lit.push(sp(BG(1.4,1.2,1.4),0x8c9aa6,p.x,.6,p.z),sp(CG(.55,.55,.14,12),0xc8323c,p.x,1.5,p.z));return {x:p.x,z:p.z}});
+    const top=on(0,115);SITE.dam={x:cx,z:cz,top,keeper:{x:top.x+5,z:top.z},valves};
+    wpoi('dam','翡翠水庫',top.x,top.z-4);
+  }
+  /* 碧潭 */
+  {const K=LAND.lake,sx=K.x,sz=K.z-K.r+2;
+    for(const [a,b] of [[-2.4,-1.8],[2.4,-1.8],[-2.4,1.8],[2.4,1.8]])lit.push(sp(BG(.2,2.8,.2),0x6b5a3a,sx+8+a,1.4,sz-12+b));
+    lit.push(sp(BG(5.6,.2,4.4),0x2e6fd6,sx+8,2.9,sz-12),sp(BG(4,1,1.1),0x8a6a3c,sx+8,.5,sz-10.6));obs(sx+8,sz-10.6,4,1.1);
+    for(let k=0;k<4;k++)lit.push(sp(BG(.06,2.6,.06),0x3a2a1e,sx+11.5,1.3,sz-13.4+k*.5));
+    for(const [a,c] of [[-16,0xc8323c],[-11,0xf2f2f2],[14,0x2f9e5a]])lit.push(part(BG(1.5,.55,3.6),c,sx+a,K.y+.12,sz+14,0,a*.05,0),part(BG(1.1,.1,.4),0x8a6a3c,sx+a,K.y+.42,sz+14,0,a*.05,0));
+    lit.push(sp(BG(2.4,1.4,.15),0x8a6a3c,sx-8,1.9,sz-12),sp(BG(.18,1.4,.18),0x6b5a3a,sx-8,.7,sz-12));
+    SITE.lake={x:K.x,z:K.z,hai:{x:sx+8,z:sz-13.2}};wpoi('lake','碧潭',sx,sz-6);
+  }
+  /* 象山觀景台 */
+  {const V=LAND.view,x=V.x,z=V.z;
+    lit.push(sp(BG(14,.3,24),0x8a6a3c,x+4,.18,z));
+    lit.push(sp(BG(.2,1.1,24),0x6b5a3a,x+10.9,.85,z),sp(BG(.2,.16,24),0x6b5a3a,x+10.9,1.45,z));WOBS.push([x+10.4,z-12.2,x+11.6,z+12.2]);
+    for(const sz2 of [-12,12])lit.push(sp(BG(6,1.1,.2),0x6b5a3a,x+8,.85,z+sz2));
+    for(const [a,b] of [[-2.2,-2.2],[2.2,-2.2],[-2.2,2.2],[2.2,2.2]])lit.push(sp(BG(.3,3.2,.3),0x8c1d2c,x-9+a,1.6,z-12+b));
+    lit.push(sp(new THREE.ConeGeometry(4.4,1.8,6),0x4a4f55,x-9,4.1,z-12),sp(BG(3.4,.5,1.2),0x6b5a3a,x-9,.5,z-12));
+    lit.push(sp(CG(.1,.1,1.5,6),0x5b6058,x+9.6,.9,z-4),sp(BG(.3,.3,1),0x1d1f22,x+9.6,1.8,z-4),sp(BG(3,1.6,.15),0x2f6b3a,x-3,2,z+11.6),sp(BG(.18,1.4,.18),0x6b5a3a,x-3,.7,z+11.6));
+    SITE.view={x:x+6,z,photo:{x:x+2,z:z-7}};wpoi('view','象山觀景台',x,z);
+  }
+  /* 竹林禪寺 */
+  {const T=LAND.terr,x=T.x,z=T.z,wd=0x7a4a2a,tile=0x4a4f55,st=0x9a9a94;
+    for(const sx of [-3.2,3.2])lit.push(sp(BG(.7,5,.7),0x8c1d2c,x+sx,2.5,z+38));
+    lit.push(sp(BG(8.6,.6,.9),0x8c1d2c,x,5.1,z+38),sp(BG(10,.35,1.8),tile,x,5.7,z+38));
+    lit.push(sp(BG(27,.8,19),0xcfc6b8,x,.4,z-16),sp(BG(24,5.5,16),wd,x,3.5,z-16),sp(templeRoofGeo(),tile,x,6.2,z-16),sp(BG(3,3,.3),0x3a2414,x,2.3,z-7.9));obs(x,z-16,25,17);
+    for(const [a,b] of [[-5,30],[5,30],[-5,18],[5,18]]){lit.push(sp(BG(.5,1.3,.5),st,x+a,.65,z+b),sp(BG(.9,.2,.9),st,x+a,1.9,z+b),sp(BG(1,.25,1),st,x+a,1.4,z+b));glow.push(sp(BG(.6,.4,.6),0xffd9a0,x+a,1.65,z+b))}
+    lit.push(sp(CG(1,1.25,1.2,10),0x6b5a3a,x,.6,z-2),sp(CG(.25,1.05,.5,10),0x6b5a3a,x,1.45,z-2));
+    /* bell tower */
+    for(const [a,b] of [[-1.6,-1.6],[1.6,-1.6],[-1.6,1.6],[1.6,1.6]])lit.push(sp(BG(.35,4.2,.35),wd,x-24+a,2.1,z+10+b));
+    lit.push(sp(new THREE.ConeGeometry(3.4,1.5,4),tile,x-24,4.95,z+10,Math.PI/4),sp(CG(.65,.9,1.4,10),0x8a6a2a,x-24,2.7,z+10),sp(BG(.12,.8,.12),0x3a2414,x-24,3.75,z+10));
+    /* 放生池 */
+    lit.push(sp(CG(7,7,.5,18),st,x+26,.25,z+10),sp(CG(6.2,6.2,.1,18),0x2f86c8,x+26,.52,z+10));obs(x+26,z+10,10.5,10.5);
+    /* bamboo around the edge */
+    const r=rng(77);for(let k=0;k<46;k++){const a=r()*6.283,rr=T.r-1+r()*9;if(Math.abs(Math.atan2(Math.sin(a),Math.cos(a)-0)-Math.PI/2)<.35)continue;const bx=x+Math.cos(a)*rr,bz=z+Math.sin(a)*rr,hh=5+r()*3;
+      lit.push(sp(CG(.11,.13,hh,5),0x6fa84a,bx,hh/2,bz),sp(icoG,0x4f8f3f,bx,hh+.3,bz))}
+    SITE.temple={x,z,monk:{x:x-4,z:z+2},bell:{x:x-24,z:z+10},pond:{x:x+26,z:z+10},stones:[{x:90,z:-1330},{x:420,z:-1345},{x:250,z:-1480}]};
+    wpoi('mtemple','竹林禪寺',x,z+30);
+  }
+  /* 陽明山頂 */
+  {const Y=LAND.yang;lit.push(sp(BG(.6,1.4,.6),0x9a9a94,Y.x,.7,Y.z),sp(BG(2.6,1.2,.15),0x6b5a3a,Y.x+3,1.9,Y.z),sp(BG(.18,1.4,.18),0x6b5a3a,Y.x+3,.7,Y.z));wpoi('peak','陽明山頂',Y.x,Y.z+4)}
+  scene.add(new THREE.Mesh(mergeParts(lit),vcMat));
+  scene.add(new THREE.Mesh(mergeParts(glow),new THREE.MeshBasicMaterial({vertexColors:true})));
+})();
+
+/* ---------- new places inside the street grid ---------- */
+/* 小山丘公園: a mound you can climb, with a pavilion on top */
+function buildHill(B,g,ix,iz,r){
+  const x0=ix*CELL,z0=iz*CELL,pos=[],col=[],i0=(x0+WALK)/TG,j0=(z0+WALK)/TG;
+  for(let a=0;a<4;a++)for(let b=0;b<4;b++)landQuad(pos,col,i0+a,j0+b);
+  g.add(landMesh(pos,col));
+  const cx=x0+30,cz=z0+30,top=heightAt(cx,cz);
+  for(const [a,b] of [[-1.8,-1.8],[1.8,-1.8],[-1.8,1.8],[1.8,1.8]])B.add('box',UNIT,MAT.box,cx+a,top+1.5,cz+b,.28,3,.28,0,'#8c1d2c');
+  B.add('pine',coneG,MAT.leaf,cx,top+3.7,cz,3.6,1.5,3.6,Math.PI/7,'#4a4f55');B.add('box',UNIT,MAT.box,cx,top+.45,cz,2.4,.5,.9,0,'#8a6a3c');
+  for(let k=0;k<9;k++){const a=r()*6.283,d=9+r()*9,tx=cx+Math.cos(a)*d,tz=cz+Math.sin(a)*d,h=heightAt(tx,tz),s=1.7+r()*1.3;
+    B.add('leaf',icoG,MAT.leaf,tx,h+3.2+s*.6,tz,s,s*1.1,s,r()*6,pick(['#3f7d3a','#4f8f3f','#2f6b3a'],r));B.add('box',UNIT,MAT.box,tx,h+1.3,tz,.45,2.6,.45,0,'#5a4636')}
+}
+const _signs={};
+function signTex(key,big,small,bg,ink,edge){
+  return _signs[key]||(_signs[key]=cvs(1024,256,(g,W,H)=>{g.fillStyle=bg;g.fillRect(0,0,W,H);g.strokeStyle=edge;g.lineWidth=10;g.strokeRect(12,12,W-24,H-24);
+    g.textAlign='center';g.textBaseline='middle';g.fillStyle=ink;g.font='900 124px "Noto Sans TC",sans-serif';g.fillText(big,W/2,106);g.font='700 40px "Russo One","Noto Sans TC",sans-serif';g.fillStyle=edge;g.fillText(small,W/2,208)}));
+}
+/* 好市集量販: a big-box store with a forecourt where the staff stand */
+function buildMall(B,g,ix,iz,r){
+  const x0=ix*CELL,z0=iz*CELL,cx=x0+30,mk=(geo,mat,x,y,z)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);g.add(m);return m};
+  mk(BG(34,9,25),M(0xe9ecf1),cx,4.5,z0+36.5);mk(BG(34.4,1.6,25.4),M(0x1f6fd6),cx,8.5,z0+36.5);
+  const sg=mk(new THREE.PlaneGeometry(17,4.25),new THREE.MeshBasicMaterial({map:signTex('mall','好市集量販','HAO  MART  ・  天天便宜','#1f6fd6','#ffffff','#ffd35c')}),cx,6,z0+23.92);sg.rotation.y=Math.PI;
+  mk(BG(8,3.4,.3),BM(0x16324f),cx,1.7,z0+23.95);mk(BG(12,.3,3.2),M(0x1f6fd6),cx,3.85,z0+22.5);
+  for(const sx of [-5.6,5.6])B.add('box',UNIT,MAT.box,cx+sx,1.9,z0+21.1,.3,3.8,.3,0,'#c9ccd2');
+  /* trolleys, parking bays, tasting stand and till */
+  for(let k=0;k<9;k++)B.add('box',UNIT,MAT.box,x0+14.5+k*.75,.6,z0+22.4,.6,.75,1.1,0,'#c9ccd2');
+  for(let k=0;k<7;k++)B.add('box',UNIT,MAT.box,x0+15+k*5,.07,z0+13,.16,.02,5,0,'#f2f2f2');
+  B.add('box',UNIT,MAT.box,cx-10,.5,z0+19.2,2.6,1,1,0,'#f2f2f2');B.add('box',UNIT,MAT.box,cx-10,2.7,z0+19.4,3.2,.16,2.2,0,'#d7263d');
+  for(const sx of [-1.4,1.4])B.add('box',UNIT,MAT.box,cx-10+sx,1.35,z0+20.3,.1,2.7,.1,0,'#5b6068');
+  B.add('box',UNIT,MAT.box,cx+9,.55,z0+20.6,3.2,1.1,1,0,'#1f6fd6');B.add('box',UNIT,MAT.box,cx+9.9,1.35,z0+20.6,.7,.5,.6,0,'#1d1f26');
+  for(const [a,c] of [[13,'#d7263d'],[14.4,'#f4a300'],[15.8,'#1b998b']])B.add('box',UNIT,MAT.box,cx+a,.7,z0+22.6,1.2,1.4,1.2,0,c);
+}
+/* 夜貓酒吧: an open-air bar with a counter hut, tables and a string of lights */
+function buildBar(B,g,ix,iz,r){
+  const x0=ix*CELL,z0=iz*CELL,cx=x0+30,mk=(geo,mat,x,y,z)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);g.add(m);return m};
+  mk(BG(16,3.6,6.5),M(0x3a2a22),cx,1.8,z0+43.5);mk(BG(18.5,.35,10.5),M(0x2a1a14),cx,3.95,z0+42);mk(BG(15,1.15,1),M(0x8a5a2c),cx,.58,z0+38.9);
+  const sg=mk(new THREE.PlaneGeometry(11,2.75),new THREE.MeshBasicMaterial({map:signTex('bar','夜貓酒吧','NIGHT  OWL  BAR','#170a1c','#ff8fd0','#7dd3ff')}),cx,5.6,z0+36.9);sg.rotation.y=Math.PI;
+  for(let k=0;k<12;k++)B.add('bl'+(k%4),UNIT,BM([0xff8fd0,0x7dd3ff,0xffd35c,0x7dffb8][k%4]),cx-5.5+k,2.3+(k%3)*.28,z0+40.15,.22,.5,.22);
+  for(const sx of [-8.6,8.6])B.add('box',UNIT,MAT.box,cx+sx,1.95,z0+37.4,.3,3.9,.3,0,'#2a1a14');
+  for(const [px,pz] of [[x0+13,z0+13],[x0+47,z0+13]]){B.add('box',UNIT,MAT.box,px,2.4,pz,.2,4.8,.2,0,'#2a1a14');
+    for(let k=1;k<10;k++){const t=k/10,lx=px+(cx+(px<cx?-8.6:8.6)-px)*t,lz=pz+(z0+37.4-pz)*t;B.add('bulb',UNIT,MAT.lamp,lx,4.6-Math.sin(t*Math.PI)*.7,lz,.25,.25,.25)}}
+  for(const [tx,tz] of [[-12,18],[-3,16],[7,19],[13,27],[-13,29],[-2,27]]){
+    B.add('tbl',CG(1,1,.12,12),MAT.box,cx+tx,1.02,z0+tz,1,1,1,0,'#8a5a2c');B.add('box',UNIT,MAT.box,cx+tx,.5,z0+tz,.18,1,.18,0,'#2a1a14');
+    for(let k=0;k<3;k++){const a=k*2.1+tx;B.add('stl',CG(.36,.36,.62,8),MAT.box,cx+tx+Math.cos(a)*1.55,.31,z0+tz+Math.sin(a)*1.55,1,1,1,0,'#c8323c')}}
+  B.add('box',UNIT,MAT.box,x0+14.5,.3,z0+40,5,.6,8,0,'#2a1a14');B.add('box',UNIT,MAT.box,x0+12.6,1.5,z0+43,1.2,1.8,1.6,0,'#1d1f26');
 }
 
 
@@ -1442,7 +1757,7 @@ document.addEventListener('pointerlockchange',()=>{lockOn=document.pointerLockEl
 const vehicles=[];const vKeys=new Set();
 function addVehicle(type,x,z,h,key,g,kind){
   if(!g)g=type==='bike'?makeBike():type==='scooter'?makeScooter(pick([0xf2f2f2,0x1d1f26,0xc8102e,0x2c5fd6,0x9aa1ac,0x6fb6a8,0xe7d6b0])):car(kind==='taxi'?0xffd21f:pick([0xd9dde8,0x8a93ad,0x2a3550,0x7a2f3a,0x3d5a45,0x1d1f26]),kind).g;
-  const v={type,x,z,h,vx:0,vz:0,fwd:0,key,g,moved:false,st:VT[type],kind};v.g.position.set(x,0,z);v.g.rotation.set(0,h,0);vehicles.push(v);if(key)vKeys.add(key);return v;
+  const v={type,x,z,y:heightAt(x,z),h,vx:0,vz:0,fwd:0,key,g,moved:false,st:VT[type],kind};v.g.rotation.order='YXZ';v.g.position.set(x,v.y,z);v.g.rotation.set(0,h,0);vehicles.push(v);if(key)vKeys.add(key);return v;
 }
 function spawnVehicles(){
   const cx=Math.floor(heroPos.x/CELL),cz=Math.floor(heroPos.z/CELL);
@@ -1450,10 +1765,10 @@ function spawnVehicles(){
     const r=rng(hash(i,j,21));const a=r(),b=r(),c=r(),d=r(),e=r();
     const p=poiAt(i,j);
     if(p&&p.type==='ubike')for(let k=0;k<4;k++){const key=`b${i},${j},${k}`;if(!vKeys.has(key))addVehicle('bike',p.x+2+k*1.3,p.z-1.2,0,key)}
-    if(a<.6){const key=`s${i},${j}`;if(!vKeys.has(key))addVehicle('scooter',i*CELL+14+b*30,(j+1)*CELL-7.4,e<.5?0:Math.PI,key)}
+    if(a<.6&&cellType(i,j)!=='wild'){const key=`s${i},${j}`;if(!vKeys.has(key))addVehicle('scooter',i*CELL+14+b*30,(j+1)*CELL-7.4,e<.5?0:Math.PI,key)}
     if(c<.3&&cellType(i,j)==='block'){const key=`c${i},${j}`;if(!vKeys.has(key))addVehicle('car',i*CELL+16+d*28,(j+1)*CELL-5,d<.5?Math.PI/2:-Math.PI/2,key,null,e<.3?'taxi':null)}
   }
-  for(let k=vehicles.length-1;k>=0;k--){const v=vehicles[k];if(v===S.veh||v.story)continue;
+  for(let k=vehicles.length-1;k>=0;k--){const v=vehicles[k];if(v===S.veh||v.story||v.keep)continue;
     if(hyp(v,heroPos)>280){scene.remove(v.g);vehicles.splice(k,1);if(!v.moved&&v.key)vKeys.delete(v.key)}}
 }
 
@@ -1473,7 +1788,7 @@ function updateTraffic(dt){
   queueVehicles(traffic.map(t=>t.w).concat(police.map(p=>p.w)),heroPos,!!S.veh);
   for(const t of traffic){
     const p=t.w.update(dt);
-    if(hyp(p,heroPos)>240){t.w.placeNear(heroPos,120,200)}
+    if(hyp(p,heroPos)>240&&!S.far){t.w.placeNear(heroPos,120,200)}
     t.g.position.set(t.w.pos.x,0,t.w.pos.z);
     const ty=Math.atan2(t.w.dir.x,t.w.dir.z);t.g.rotation.y+=angDiff(ty,t.g.rotation.y)*Math.min(1,dt*8);
     if(t.w.blockedBy>70&&performance.now()-t.honk>4000&&hyp(p,heroPos)<14){t.honk=performance.now();toast('叭叭！前面的讓一下！','info',1400)}
@@ -1493,12 +1808,13 @@ const crowd=[];const crowdCells=new Set();
 function maintainCrowds(){
   const cx=Math.floor(heroPos.x/CELL),cz=Math.floor(heroPos.z/CELL);
   for(let i=cx-2;i<=cx+2;i++)for(let j=cz-2;j<=cz+2;j++){const t=cellType(i,j);const k=i+','+j;
-    if((t==='market'||t==='temple')&&!crowdCells.has(k)){crowdCells.add(k);const n=t==='market'?22:8;
+    if((t==='market'||t==='temple'||t==='bar')&&!crowdCells.has(k)){crowdCells.add(k);const n=t==='market'?22:8;
       for(let q=0;q<n;q++){const p=newPedModel();if(!p)break;const c={p,cell:[i,j],kind:t,x:0,z:0,tx:0,tz:0,panic:0,down:0,pause:Math.random()*3};crowdTarget(c,true);c.x=c.tx;c.z=c.tz;crowd.push(c)}}}
   for(let q=crowd.length-1;q>=0;q--){const c=crowd[q];const k=c.cell[0]+','+c.cell[1];if(Math.hypot(c.cell[0]*CELL+30-heroPos.x,c.cell[1]*CELL+30-heroPos.z)>220){freeVP(c.p);crowd.splice(q,1);crowdCells.delete(k)}}
 }
 function crowdTarget(c,any){const x0=c.cell[0]*CELL,z0=c.cell[1]*CELL;
   if(c.kind==='market'){c.tx=x0+14+Math.random()*32;c.tz=z0+pick([25,37,13.5,48])+(Math.random()-.5)*2}
+  else if(c.kind==='bar'){c.tx=x0+13+Math.random()*34;c.tz=z0+13+Math.random()*22}
   else{c.tx=x0+14+Math.random()*32;c.tz=z0+12+Math.random()*12}}
 function panicPeds(at,r){peds.forEach(pd=>{if(!pd.down&&hyp(pd,at)<r)pd.panic=5});crowd.forEach(c=>{if(!c.down&&hyp(c,at)<r)c.panic=5})}
 function knockPed(pd,now){pd.down=now;panicPeds(pd,25);if(now-S.pedHit>5000){S.pedHit=now;addWanted(1,'撞到行人')}}
@@ -1509,7 +1825,7 @@ function updatePeds(dt,now){
     if(pd.down){if(now-pd.down<2600){g.rotation.x=-Math.PI/2*Math.min(1,(now-pd.down)/250);g.position.y=.35;continue}pd.down=0;g.rotation.x=0;g.position.y=0;pd.panic=5}
     if(pd.panic>0){pd.panic-=dt;pd.w.speed=4.4;pd.away.x=pd.x*2-heroPos.x;pd.away.z=pd.z*2-heroPos.z;pd.w.target=pd.away;pd.w.bias=.85}else{pd.w.speed=pd.base;pd.w.target=null}
     const ox=pd.x,oz=pd.z;const q=pd.w.update(dt);pd.x=q.x;pd.z=q.z;
-    if(hyp(q,heroPos)>210){pd.w.placeNear(heroPos,110,190);pd.x=pd.w.pos.x;pd.z=pd.w.pos.z;pd.panic=0;continue}
+    if(hyp(q,heroPos)>210&&!S.far){pd.w.placeNear(heroPos,110,190);pd.x=pd.w.pos.x;pd.z=pd.w.pos.z;pd.panic=0;continue}
     g.position.set(q.x,0,q.z);g.rotation.y=Math.atan2(pd.w.dir.x,pd.w.dir.z);
     if(hyp(q,camera.position)<90)animPerson(pd.p,Math.hypot(q.x-ox,q.z-oz),dt,pd.panic>0);
     if(S.veh&&Math.abs(S.veh.fwd)>5&&hyp(q,heroPos)<S.veh.st.rad+.6){knockPed(pd,now);S.veh.fwd*=.85}
@@ -1646,7 +1962,7 @@ function canWalk(x,z){
   if(!S.plat)return walkable(x,z);
   const q=platLocal(S.plat,x,z);return Math.abs(q.a)<=20.6&&Math.abs(q.l)>=1.95&&Math.abs(q.l)<=4.55&&Math.sign(q.l)===S.platSide;
 }
-function groundY(){return S.plat?S.plat.line.H:0}
+function groundY(){return S.plat?S.plat.line.H:S.inside?0:heightAt(heroPos.x,heroPos.z)}
 function etaTo(st,dir){
   let best=1e9;for(const t of metro.trains){if(t.L!==st.line||t.dir!==dir)continue;const d=(st.s-t.s)*dir;if(d<-.5)continue;
     if(t.state==='dwell'&&trainStop(t)===st){best=0;break}
@@ -1691,21 +2007,49 @@ function metroHud(){
 
 
 /* ================= player on foot ================= */
+/* can the hero step to (x,z)? walls as before, plus slopes too steep to climb */
+let edgeT=0;
+function stepOK(x,z){
+  if(!canWalk(x,z)){if(!S.inside&&!S.plat&&cityDist(x,z)>WORLD_EDGE&&performance.now()-edgeT>4000){edgeT=performance.now();toast('再過去是深山，沒有路了','info',2200)}return false}
+  if(S.inside||S.plat)return true;
+  const h1=heightAt(x,z);if(h1<=heroPos.y+.03)return true;
+  const run=Math.hypot(x-heroPos.x,z-heroPos.z);
+  return h1-heightAt(heroPos.x,heroPos.z)<=run*(S.items.boots?1.7:1.15)+.01;
+}
 function moveHeroFree(dt,ix,iy,sprint){
   const f={x:-Math.sin(camYaw),z:-Math.cos(camYaw)},rt={x:Math.cos(camYaw),z:-Math.sin(camYaw)};
   const mag=Math.min(1,Math.hypot(ix,iy));
-  const canRun=sprint&&S.st>1&&mag>.2;
-  const sp=(canRun?7:3.4)*mag*S.spd;
+  const flat=S.inside||S.plat,wd=flat?0:waterDepth(heroPos.x,heroPos.z),swim=wd>1.3;
+  if(swim&&!S.swim&&!S.swam){S.swam=1;toast('下水了：游泳比較慢，賣場有賣蛙鞋','info',3200)}
+  S.swim=swim;
+  const canRun=sprint&&S.st>1&&mag>.2&&!swim;
+  const sp=(canRun?7:3.4)*mag*S.spd*(swim?(S.items.fins?1:.5):wd>.5?.75:1);
   let dx=f.x*iy+rt.x*ix,dz=f.z*iy+rt.z*ix;const dl=Math.hypot(dx,dz)||1;dx/=dl;dz/=dl;
   const k=Math.min(1,dt*(grounded?10:2));
   heroVel.x+=(dx*sp-heroVel.x)*k;heroVel.z+=(dz*sp-heroVel.z)*k;
   S.st=clamp(S.st+(canRun?-15*S.stDrain:10)*dt,0,S.maxSt);
-  if(jumpQ&&grounded){heroVy=6.2;grounded=false}jumpQ=false;
-  const gy=groundY();if(grounded)heroPos.y=gy;
-  if(!grounded){heroVy-=18*dt;heroPos.y+=heroVy*dt;if(heroPos.y<=gy){heroPos.y=gy;heroVy=0;grounded=true}}
+  if(jumpQ&&grounded&&!swim){heroVy=6.2;grounded=false}jumpQ=false;
+  const ox=heroPos.x,oz=heroPos.z;
   const nx=heroPos.x+heroVel.x*dt,nz=heroPos.z+heroVel.z*dt;
-  if(canWalk(nx,heroPos.z))heroPos.x=nx;else heroVel.x=0;
-  if(canWalk(heroPos.x,nz))heroPos.z=nz;else heroVel.z=0;
+  if(stepOK(nx,heroPos.z))heroPos.x=nx;else heroVel.x=0;
+  if(stepOK(heroPos.x,nz))heroPos.z=nz;else heroVel.z=0;
+  let gy=groundY();
+  if(swim){const w=waterAt(heroPos.x,heroPos.z);if(w)gy=Math.max(gy,w.y-1.5)}
+  if(grounded){
+    /* the ground falling away faster than a ~50° slope means we have walked off an edge */
+    const drop=heroPos.y-gy,moved=Math.hypot(heroPos.x-ox,heroPos.z-oz);
+    if(!flat&&!swim&&drop>.03&&(drop>.6||drop>moved*1.25)){grounded=false;heroVy=Math.min(heroVy,0)}else heroPos.y=gy;
+  }
+  if(!grounded){heroVy-=18*dt;heroPos.y+=heroVy*dt;if(heroPos.y<=gy){heroPos.y=gy;heroVy=0;grounded=true}}
+  /* fall damage: measured from the highest point since the last time we stood on gentle ground */
+  if(flat||S.fallTop===undefined||Math.hypot(heroPos.x-S.lx,heroPos.z-S.lz)>5)S.fallTop=heroPos.y;
+  S.lx=heroPos.x;S.lz=heroPos.z;if(heroPos.y>S.fallTop)S.fallTop=heroPos.y;
+  if(grounded&&!flat){
+    const x=heroPos.x,z=heroPos.z,steep=!swim&&gy>0&&Math.hypot(heightAt(x+1,z)-heightAt(x-1,z),heightAt(x,z+1)-heightAt(x,z-1))>2.5;
+    if(!steep){const fell=S.fallTop-heroPos.y;S.fallTop=heroPos.y;
+      if(fell>7&&!swim){const d=Math.round((fell-7)*2.5*(S.items.boots?.5:1));hurtHero(d);camShake=.6;toast(`摔下來了！-${d}`,'bad',1800)}
+      else if(fell>7&&swim)toast('撲通！跳進水裡，毫髮無傷','good',1800)}
+  }
   const spd=Math.hypot(heroVel.x,heroVel.z);
   if(S.aim>0||S.swing>0){const ty=S.aimYaw!==undefined?S.aimYaw:camYaw+Math.PI;heroYaw+=angDiff(ty,heroYaw)*Math.min(1,dt*16)}
   else if(spd>.3)heroYaw+=angDiff(Math.atan2(heroVel.x,heroVel.z),heroYaw)*Math.min(1,dt*10);
@@ -1713,8 +2057,10 @@ function moveHeroFree(dt,ix,iy,sprint){
 }
 function poseHero(dt,spd,run){
   hero.g.position.set(heroPos.x,heroPos.y,heroPos.z);hero.g.rotation.set(0,heroYaw,0);
-  if(!grounded){hero.legL.rotation.x=-.5;hero.legR.rotation.x=.3;hero.armL.rotation.x=-.8;hero.armR.rotation.x=-.8}
+  if(S.swim&&!S.inside){hero.phase+=dt*(2+spd*1.6);const a=Math.sin(hero.phase);hero.armL.rotation.x=-1.9+a*.9;hero.armR.rotation.x=-1.9-a*.9;hero.legL.rotation.x=a*.4;hero.legR.rotation.x=-a*.4}
+  else if(!grounded){hero.legL.rotation.x=-.5;hero.legR.rotation.x=.3;hero.armL.rotation.x=-.8;hero.armR.rotation.x=-.8}
   else animPerson(hero,spd*dt,dt,run);
+  if(S.fish)hero.armR.rotation.x=-1.25;
   if(S.swing>0){S.swing-=dt;hero.armR.rotation.x=-2.3+(1-Math.max(0,S.swing)/.28)*2.6}
   else if(S.aim>0){S.aim-=dt;hero.armR.rotation.x=-Math.PI/2}
 }
@@ -1737,22 +2083,31 @@ function driveVehicle(v,dt,thr,steer,hb){
   let nx=v.x+v.vx*dt,nz=v.z+v.vz*dt;
   if(S.mode==='gps'&&Math.hypot(nx-est.x,nz-est.z)>LEASH){v.vx*=-.2;v.vz*=-.2;nx=v.x;nz=v.z;if(performance.now()-leashWarn>2500){leashWarn=performance.now();toast(`GPS 模式：只能離你的實際位置 ${LEASH} 公尺`,'bad')}}
   let hit=false;
-  if(walkable(nx,v.z))v.x=nx;else{v.vx*=-.3;hit=true}
-  if(walkable(v.x,nz))v.z=nz;else{v.vz*=-.3;hit=true}
+  if(driveOK(v,nx,v.z))v.x=nx;else{v.vx*=-.3;hit=true}
+  if(driveOK(v,v.x,nz))v.z=nz;else{v.vz*=-.3;hit=true}
   if(hit&&Math.abs(fwd)>9){hurtHero(v.type==='car'?3:6);camShake=.4}
   /* traffic collisions */
   for(const t of traffic){const d=hyp(t.w.pos,v);const rr=st.rad+(t.kind==='car'?2:1);
     if(d<rr){const nx2=(v.x-t.w.pos.x)/(d||1),nz2=(v.z-t.w.pos.z)/(d||1);v.x+=nx2*(rr-d);v.z+=nz2*(rr-d);const vn=v.vx*nx2+v.vz*nz2;if(vn<0){v.vx-=1.4*vn*nx2;v.vz-=1.4*vn*nz2}
       if(Math.abs(fwd)>8){camShake=.35;if(v.type!=='car')hurtHero(5)}}}
-  v.g.position.set(v.x,0,v.z);
+  v.y=heightAt(v.x,v.z);let pitch=0;
+  if(v.y!==0||!inCity(v.x,v.z)){const fx=Math.sin(v.h)*1.6,fz=Math.cos(v.h)*1.6;pitch=Math.atan2(heightAt(v.x+fx,v.z+fz)-heightAt(v.x-fx,v.z-fz),3.2)}
+  v.g.position.set(v.x,v.y,v.z);
   const lean=v.type==='car'?0:-steer*.35*Math.min(1,Math.abs(fwd)/8);
-  v.g.rotation.set(0,v.h,lean);
+  v.g.rotation.set(-pitch,v.h,lean);
   v.moved=true;
+}
+/* off-road limits: no deep water, and only slopes the vehicle can climb */
+function driveOK(v,x,z){
+  if(!walkable(x,z))return false;
+  const h1=heightAt(x,z);if(h1===0&&v.y===0)return true;
+  if(waterDepth(x,z)>.7)return false;
+  return h1-v.y<=Math.hypot(x-v.x,z-v.z)*(v.jeep?1.05:v.type==='bike'?.5:.72)+.02;
 }
 function placeRider(){
   const v=S.veh;
   if(v.type==='car'){hero.g.visible=false;return}
-  hero.g.visible=true;hero.g.position.set(v.x-Math.sin(v.h)*.15,v.st.seat-.95+.1,v.z-Math.cos(v.h)*.15);
+  hero.g.visible=true;hero.g.position.set(v.x-Math.sin(v.h)*.15,v.y+v.st.seat-.95+.1,v.z-Math.cos(v.h)*.15);
   hero.g.rotation.set(0,v.h,v.g.rotation.z);sitPose(hero);
 }
 function nearVehicle(){
@@ -1773,7 +2128,7 @@ function enterVehicle(n){
     if(v.type==='bike'&&!v.rented){if(!pay(10))return;v.rented=true;toast('租用 U-bike　-NT$10','info')}
     else if(!v.owned&&!v.story){v.owned=true;if(police.some(p=>hyp(p.w.pos,heroPos)<45))addWanted(1,'偷車被警察看到')}
   }
-  S.veh=v;heroVel.x=heroVel.z=0;heroPos.y=0;grounded=true;
+  S.veh=v;heroVel.x=heroVel.z=0;heroPos.y=v.y;grounded=true;S.fish=null;
   heroHelmet.visible=v.type==='scooter';hero.hr.visible=v.type!=='scooter';
   $('speedo').hidden=false;$('area').classList.remove('on');
   document.body.classList.add('driving');$('tJump').textContent='手煞';input.x=input.y=0;padReset();
@@ -1784,7 +2139,7 @@ function exitVehicle(){
   if(Math.abs(v.fwd)>6){toast('太快了，先減速再下車','info',1400);return}
   v.vx=v.vz=v.fwd=0;S.veh=null;$('speedo').hidden=true;document.body.classList.remove('driving');$('tJump').textContent='跳';padReset();
   hero.g.visible=true;heroHelmet.visible=false;hero.hr.visible=true;
-  heroYaw=v.h;heroPos.x=v.x+Math.cos(v.h)*(v.st.rad+.6);heroPos.z=v.z-Math.sin(v.h)*(v.st.rad+.6);snapWalk(heroPos);heroPos.y=0;
+  heroYaw=v.h;heroPos.x=v.x+Math.cos(v.h)*(v.st.rad+.6);heroPos.z=v.z-Math.sin(v.h)*(v.st.rad+.6);snapWalk(heroPos);heroPos.y=heightAt(heroPos.x,heroPos.z);S.fallTop=heroPos.y;
   v.g.rotation.z=0;
   if(S.mode==='gps'&&hyp(heroPos,est)>6){S.returning=true;toast('GPS 模式：角色會走回你的實際位置','info')}
 }
@@ -1798,16 +2153,16 @@ function updateCamera(dt){
   const want=(S.ride?19:v?v.st.cam+Math.min(3,Math.abs(v.fwd)*.08):5.2)*(portrait?1.35:1);
   camDist+=(want-camDist)*Math.min(1,dt*3);
   if(v&&Math.abs(v.fwd)>2&&performance.now()-lastLook>1300){const ty=v.h+Math.PI+(v.fwd<0?Math.PI:0);camYaw+=angDiff(ty,camYaw)*Math.min(1,dt*2.4);camPitch+=(.2-camPitch)*Math.min(1,dt)}
-  const ty=S.ride?heroPos.y+2.2:v?1.5:1.65+heroPos.y;
+  const ty=S.ride?heroPos.y+2.2:(v?1.5:1.65)+heroPos.y;
   camTarget.set(heroPos.x,ty,heroPos.z);
   const cp=Math.cos(camPitch),sp=Math.sin(camPitch);
   const dx=Math.sin(camYaw)*cp,dy=sp,dz=Math.cos(camYaw)*cp;
   let d=camDist,hitWall=false;
   for(let s=.6;s<=camDist;s+=.35){const x=camTarget.x+dx*s,y=camTarget.y+dy*s,z=camTarget.z+dz*s;const g=Math.min(dGrid(x),dGrid(z));
-    if(!walkable(x,z)||(g>ARC-.3&&g<=WALK+.5&&y>3.3&&cellType(Math.floor(x/CELL),Math.floor(z/CELL))==='block')){d=Math.max(2.4,s-.35);hitWall=true;break}}
+    if(!walkable(x,z)||(g>ARC-.3&&g<=WALK+.5&&y>3.3&&cellType(Math.floor(x/CELL),Math.floor(z/CELL))==='block')||y<heightAt(x,z)+.35){d=Math.max(2.4,s-.35);hitWall=true;break}}
   const sh=camShake>0?(Math.random()-.5)*camShake*.3:0;camShake=Math.max(0,camShake-dt);
   camLift+=((hitWall&&d<camDist-.5?1.6:0)-camLift)*Math.min(1,dt*4);
-  camera.position.set(camTarget.x+dx*d+sh,Math.max(.5,camTarget.y+dy*d+camLift)+sh,camTarget.z+dz*d);
+  camera.position.set(camTarget.x+dx*d+sh,Math.max(heightAt(camTarget.x+dx*d,camTarget.z+dz*d)+.6,camTarget.y+dy*d+camLift)+sh,camTarget.z+dz*d);
   camera.lookAt(camTarget.x-dx*2,camTarget.y+(v?.3:.15)-dy*.5,camTarget.z-dz*2);
 }
 
@@ -1846,7 +2201,7 @@ function renderWeapon(){const w=WEAPONS[S.weapon];$('wName').textContent=w.name;
 function cycleWeapon(dir=1){const o=S.owned;if(o.length<2)return;setWeapon(o[mod(o.indexOf(S.weapon)+dir,o.length)])}
 function reload(){const w=WEAPONS[S.weapon];if(w.kind!=='gun'||S.reload>0||S.mag>=w.mag||S.ammo<=0)return;S.reload=S.sharp?.55:1.1;renderWeapon()}
 const tracers=[];
-function tracer(a,b,col,ay=1.9,by=1.6){const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(a.x,ay,a.z),new THREE.Vector3(b.x,by,b.z)]);
+function tracer(a,b,col,ay=1.9,by=1.6){ay+=heightAt(a.x,a.z);by+=heightAt(b.x,b.z);const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(a.x,ay,a.z),new THREE.Vector3(b.x,by,b.z)]);
   const l=new THREE.Line(g,new THREE.LineBasicMaterial({color:col||0xffe08a,transparent:true}));scene.add(l);tracers.push({l,t:.14})}
 /* thrown slippers fly as real objects */
 const projectiles=[];const slipG=BG(.28,.08,.62),slipM=M(0x2c6fd6);
@@ -1910,7 +2265,7 @@ function spawnEnemy(x,z,kind){
   else{const bt=new THREE.Mesh(CG(.04,.07,.8,6),M(0x777b88));bt.position.set(0,-1.15,.05);p.armR.add(bt)}
   const bar=new THREE.Group();const bg=new THREE.Mesh(planeG,hpBgMat);bg.rotation.x=Math.PI/2;bg.scale.set(1.2,1,.16);const fg=new THREE.Mesh(planeG,hpFgMat);fg.rotation.x=Math.PI/2;fg.scale.set(1.1,1,.1);fg.position.z=.01;
   bar.add(bg,fg);bar.position.y=3;bg.renderOrder=6;fg.renderOrder=7;p.g.add(bar);
-  p.g.position.set(x,0,z);scene.add(p.g);
+  p.g.position.set(x,heightAt(x,z),z);scene.add(p.g);
   const max=kind==='gun'?60:40;
   const e={p,x,z,kind,hp:max,max,cd:1+Math.random(),dead:0,bar,fg,wx:x,wz:z,alert:false,aggro:30};enemies.push(e);return e;
 }
@@ -1928,7 +2283,7 @@ function maintainEnemies(){
   }
 }
 function hurtEnemy(e,dmg,from){
-  if(e.dead)return;if(from===heroPos&&dmg<900)dmg*=S.atk;e.hp-=dmg;e.alert=true;
+  if(e.dead)return;if(from===heroPos&&dmg<900)dmg*=S.atk*(performance.now()<(S.atkBuff||0)?1.3:1);e.hp-=dmg;e.alert=true;
   const d=Math.max(.1,hyp(e,from));const kx=(e.x-from.x)/d,kz=(e.z-from.z)/d;
   if(walkable(e.x+kx*.8,e.z+kz*.8)){e.x+=kx*.8;e.z+=kz*.8}
   e.p.body.material.emissive.setHex(0x662222);setTimeout(()=>e.p.body.material.emissive.setHex(0),120);
@@ -1938,7 +2293,7 @@ function hurtEnemy(e,dmg,from){
 }
 function updateEnemies(dt,now){
   enemies.forEach(e=>{
-    if(e.dead){const t=Math.min(1,(now-e.dead)/400);e.p.g.rotation.x=-t*Math.PI/2;e.p.g.position.y=t*.3;return}
+    if(e.dead){const t=Math.min(1,(now-e.dead)/400);e.p.g.rotation.x=-t*Math.PI/2;e.p.g.position.y=heightAt(e.x,e.z)+t*.3;return}
     const d=hyp(e,heroPos);if(d<e.aggro||e.alert)e.alert=d<60;
     let tx=e.x,tz=e.z,sp=0;
     if(e.alert&&!S.dead){
@@ -1960,7 +2315,7 @@ function updateEnemies(dt,now){
     if(sp){const l=Math.hypot(tx-e.x,tz-e.z)||1;const nx=e.x+(tx-e.x)/l*sp*dt,nz=e.z+(tz-e.z)/l*sp*dt;
       if(walkable(nx,e.z)){moved+=Math.abs(nx-e.x);e.x=nx}else{e.wx=e.x;e.wz=e.z}
       if(walkable(e.x,nz)){moved+=Math.abs(nz-e.z);e.z=nz}else{e.wx=e.x;e.wz=e.z}}
-    e.p.g.position.set(e.x,0,e.z);animPerson(e.p,moved,dt,sp>3);
+    e.p.g.position.set(e.x,heightAt(e.x,e.z),e.z);animPerson(e.p,moved,dt,sp>3);
     if(e.swing>0){e.swing-=dt;e.p.armR.rotation.x=-2.3+(1-e.swing/.28)*2.6}
     else if(e.kind==='gun'&&e.alert&&d<26)e.p.armR.rotation.x=-Math.PI/2;
     e.fg.scale.x=1.1*Math.max(0,e.hp/e.max);e.fg.position.x=-(1.1-e.fg.scale.x)/2;
@@ -1995,7 +2350,7 @@ function updatePolice(dt,now){
     p.c.g.position.set(q.x,0,q.z);p.c.g.rotation.y+=angDiff(Math.atan2(p.w.dir.x,p.w.dir.z),p.c.g.rotation.y)*Math.min(1,dt*8);
     p.c.r.visible=!!blink;p.c.b.visible=!blink;
     const d=hyp(q,heroPos);
-    if(d>260)p.w.placeNear(heroPos,80,130);
+    if(d>260&&!S.far)p.w.placeNear(heroPos,80,130);
     if(d<16&&!S.dead&&!S.plat&&!S.ride&&(!S.veh||Math.abs(S.veh.fwd)<2.5))near=true;
     if(S.wanted>=3&&d<28&&!S.dead){p.cd-=dt;if(p.cd<=0){p.cd=1.6+Math.random();const hit=Math.random()<.35;tracer(q,hit?heroPos:{x:heroPos.x+(Math.random()-.5)*4,z:heroPos.z+(Math.random()-.5)*4},0x9fc4ff,1.6,1.6);if(hit)hurtHero(6)}}
   });
@@ -2007,7 +2362,7 @@ function updatePolice(dt,now){
 
 /* ================= health, death, arrest ================= */
 function hurtHero(n){
-  if(S.dead||S.ride)return;S.hp=Math.max(0,S.hp-n);S.lastHurt=performance.now();$('hurt').style.opacity=.9;
+  if(S.dead||S.ride)return;if(S.items.vest)n*=.7;S.hp=Math.max(0,S.hp-n);S.lastHurt=performance.now();$('hurt').style.opacity=.9;
   if(S.hp<=0&&S.items.amulet){S.items.amulet=0;S.hp=40;bigMsg('平安符發光了','你撐了下來，平安符碎了',false,2600);return}
   if(S.hp<=0)die();
 }
@@ -2158,17 +2513,17 @@ $('xReal').onclick=()=>{if(S.real)stopReal();else startReal()};
 /* ================= pickups ================= */
 const cashG=CG(.7,.7,.25,16),cashM=new THREE.MeshBasicMaterial({color:0x72d68f}),ammoG=BG(.7,.45,.5),ammoM=new THREE.MeshBasicMaterial({color:0xffd35c});
 let pickups=[];
-function dropPickup(x,z,d){const m=new THREE.Mesh(d.kind==='ammo'?ammoG:cashG,d.kind==='ammo'?ammoM:cashM);if(d.kind!=='ammo')m.rotation.z=Math.PI/2;m.position.set(x,1,z);scene.add(m);pickups.push({x,z,m,kind:d.kind,v:d.v,drop:true})}
+function dropPickup(x,z,d){const m=new THREE.Mesh(d.kind==='ammo'?ammoG:cashG,d.kind==='ammo'?ammoM:cashM);if(d.kind!=='ammo')m.rotation.z=Math.PI/2;m.position.set(x,1,z);scene.add(m);pickups.push({x,z,m,kind:d.kind,v:d.v,drop:true,y:heightAt(x,z)})}
 function maintainPickups(){
   pickups=pickups.filter(k=>{if(hyp(k,heroPos)>220){scene.remove(k.m);return false}return true});
-  while(pickups.filter(p=>!p.drop).length<7){
-    const a=Math.random()*6.283,d=30+Math.random()*120;let p={x:heroPos.x+Math.cos(a)*d,z:heroPos.z+Math.sin(a)*d};
+  for(let tries=0;tries<12&&pickups.filter(p=>!p.drop).length<7;tries++){
+    const a=Math.random()*6.283,d=30+Math.random()*120;let p={x:heroPos.x+Math.cos(a)*d,z:heroPos.z+Math.sin(a)*d};if(p.x<CX0+12||p.x>CX1-12||p.z<CZ0+12||p.z>CZ1-12)continue;
     if(Math.random()<.5)p.x=Math.round(p.x/CELL)*CELL+(Math.random()<.5?-8.6:8.6);else p.z=Math.round(p.z/CELL)*CELL+(Math.random()<.5?-8.6:8.6);
     const m=new THREE.Mesh(cashG,cashM);m.rotation.z=Math.PI/2;m.position.set(p.x,1,p.z);scene.add(m);pickups.push({x:p.x,z:p.z,m,kind:'cash',v:100});
   }
 }
 function updatePickups(dt,now){
-  pickups=pickups.filter(k=>{k.m.rotation.y+=dt*2;k.m.position.y=1+Math.sin(now/300+k.x)*.2;
+  pickups=pickups.filter(k=>{k.m.rotation.y+=dt*2;k.m.position.y=(k.y||0)+1+Math.sin(now/300+k.x)*.2;
     if(hyp(k,heroPos)<2.6&&!S.dead&&!S.plat&&!S.ride){scene.remove(k.m);if(k.kind==='ammo'){S.ammo+=k.v;renderWeapon();toast('撿到子彈 +'+k.v,'good',1500)}else{S.picked++;reward(k.v,k.drop?'撿到掉落的現金':'撿到現金')}return false}return true});
 }
 
@@ -2193,16 +2548,17 @@ function openShop(p){
       fadeTo(()=>{heroPos.x=q.x;heroPos.z=q.z;heroVel.x=heroVel.z=0;truth.x=est.x=heroPos.x;truth.z=est.z=heroPos.z;est.cx=est.cz=0;srv.x=heroPos.x;srv.z=heroPos.z;srv.t=performance.now();streamChunks(heroPos,true);toast('抵達 '+q.name,'good')})});
   }else{
     const items=SHOPS[p.type]||[];
-    $('shopBody').innerHTML=items.map(it=>{const own=(it.id==='bat'||it.id==='pistol')&&S.owned.includes(it.id);const need=it.id==='ammo'&&!S.owned.some(o=>WEAPONS[o].kind==='gun');
-      return `<div class="row"><div><b>${it.name}</b><div class="d">${it.desc}</div></div><button class="btn ${own||need?'':'primary'}" type="button" data-buy="${it.id}" ${own||need?'disabled':''}>${own?'已擁有':need?'需先買手槍':'NT$'+priceOf(it)}</button></div>`}).join('')+`<p class="note">目前現金 NT$${fmt(S.cash)}${S.items.vip?'・VIP 卡八折':''}</p>`;
+    $('shopBody').innerHTML=items.map(it=>{const own=it.own?!!it.own():(it.id==='bat'||it.id==='pistol')&&S.owned.includes(it.id);const need=(it.id==='ammo'||it.gun)&&!S.owned.some(o=>WEAPONS[o].kind==='gun');
+      return `<div class="row"><div><b>${it.name}</b><div class="d">${it.desc}</div></div><button class="btn ${own||need?'':'primary'}" type="button" data-buy="${it.id}" ${own||need?'disabled':''}>${own?'已擁有':need?'需先買手槍':'NT$'+priceOf(it)}</button></div>`}).join('')+`<p class="note">目前現金 NT$${fmt(S.cash)}${S.items.vip?'・VIP 卡八折':''}${p.type==='mall'&&S.items.coupon?'・折價券再八折':''}</p>`;
     $('shopBody').querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>buy(p.type,b.dataset.buy));
   }
   $('sheetShop').hidden=false;S.paused=true;
 }
-function priceOf(it){return Math.round(it.price*(S.items.vip?.8:1)*(it.id==='heal'&&S.nurse?.5:1))}
+function priceOf(it){return Math.round(it.price*(S.items.vip?.8:1)*(it.mall&&S.items.coupon?.8:1)*(it.id==='heal'&&S.nurse?.5:1))}
 function buy(type,id){
-  const it=SHOPS[type].find(s=>s.id===id);if(!pay(priceOf(it)))return;
-  if(id==='bat'||id==='pistol'){S.owned.push(id);if(id==='pistol'){S.mag=12}setWeapon(id)}
+  const it=SHOPS[type].find(s=>s.id===id);if(it.own&&it.own())return;if(!pay(priceOf(it)))return;
+  if(it.fx)it.fx();
+  else if(id==='bat'||id==='pistol'){S.owned.push(id);if(id==='pistol'){S.mag=12}setWeapon(id)}
   else if(id==='ammo'){S.ammo+=24;renderWeapon()}
   else if(id==='egg')heal(20);else if(id==='rice')heal(40);else if(id==='bento')heal(999);else if(id==='heal')S.hp=S.maxHp;
   else if(id==='drink'){S.st=S.maxSt;S.boost=60}
@@ -2223,6 +2579,7 @@ function updateContext(){
       const np=nearNPC();if(np)it={label:'交談・'+np.name,fn:()=>np.talk()};
       markers().forEach(mk=>{if(!it&&hyp(mk,heroPos)<4)it={label:'開始任務：'+mk.title,fn:()=>mk.side?missionEat(false):startStory()}});
       if(!it)forPOIs(Math.floor(heroPos.x/CELL),Math.floor(heroPos.z/CELL),1,p=>{if(!it&&SHOP_TYPES[p.type]&&hyp(p,heroPos)<5)it={label:SHOP_TYPES[p.type]+'・'+p.name,fn:()=>p.type==='casino'?enterCasino(p):openShop(p)}});
+      if(!it){const ex=extraAction();if(ex)it=ex}
       if(!it){const pd=nearPed();if(pd)it={label:'搭話',fn:()=>chatPed(pd)}}
     }
   }
@@ -2359,14 +2716,24 @@ function routePts(from,to){
 
 /* ================= minimap ================= */
 const mini=$('mini'),mg=mini.getContext('2d');
-const CELL_COL={block:'#39415a',park:'#3b6a44',market:'#7a5634',temple:'#7a3a32',tower:'#46586a',casino:'#6a2a3a'};
+const CELL_COL={block:'#39415a',park:'#3b6a44',hill:'#4f8a4a',market:'#7a5634',temple:'#7a3a32',tower:'#46586a',casino:'#6a2a3a',mall:'#2f5f93',bar:'#6a3f6a'};
+/* open country, water and tracks on both maps */
+function mapLand(g,i,j,X,Y,sz,sub){
+  const s=sz/sub;for(let a=0;a<sub;a++)for(let b=0;b<sub;b++){g.fillStyle=landHex((i+(a+.5)/sub)*CELL,(j+(b+.5)/sub)*CELL);g.fillRect(X+a*s-.4,Y+b*s-.4,s+.8,s+.8)}
+}
+function mapWater(g,tx,ty,k){
+  g.fillStyle='#3476b4';for(const w of WATERS){g.beginPath();g.arc(tx(w.x),ty(w.z),(w.r-(w.name==='碧潭'?13:6))*k,0,6.283);g.fill()}
+  g.strokeStyle='#b39a6a';g.lineWidth=Math.max(1.5,5*k);g.lineCap='round';for(const p of PATHS){g.beginPath();g.moveTo(tx(p[0]),ty(p[1]));g.lineTo(tx(p[2]),ty(p[3]));g.stroke()}
+}
 function drawMini(){
   const W=mini.width,R=115,k=W/2/R;const c=Math.cos(camYaw),s=Math.sin(camYaw);
   mg.setTransform(1,0,0,1,0,0);mg.clearRect(0,0,W,W);mg.save();mg.beginPath();mg.arc(W/2,W/2,W/2,0,6.283);mg.clip();
   mg.fillStyle='#5a6178';mg.fillRect(0,0,W,W);
   mg.setTransform(k*c,k*s,-k*s,k*c,W/2,W/2);
   const ox=heroPos.x,oz=heroPos.z,cx=Math.floor(ox/CELL),cz=Math.floor(oz/CELL);
-  for(let i=cx-3;i<=cx+3;i++)for(let j=cz-3;j<=cz+3;j++){const t=cellType(i,j);mg.fillStyle=turf(i,j)?'#4a3346':CELL_COL[t];mg.fillRect(i*CELL+ROAD-ox,j*CELL+ROAD-oz,CELL-2*ROAD,CELL-2*ROAD)}
+  for(let i=cx-3;i<=cx+3;i++)for(let j=cz-3;j<=cz+3;j++){const t=cellType(i,j);if(t==='wild'){mapLand(mg,i,j,i*CELL-ox,j*CELL-oz,CELL,1);continue}mg.fillStyle=turf(i,j)?'#4a3346':CELL_COL[t];mg.fillRect(i*CELL+ROAD-ox,j*CELL+ROAD-oz,CELL-2*ROAD,CELL-2*ROAD);
+    if(t==='park'){const pd=pondAt(i,j);if(pd){mg.fillStyle='#3476b4';mg.beginPath();mg.arc(pd.x-ox,pd.z-oz,pd.r,0,6.283);mg.fill()}}}
+  mapWater(mg,x=>x-ox,z=>z-oz,1);
   mg.lineJoin='round';for(const L of METRO_LINES){mg.strokeStyle=L.color;mg.lineWidth=3.5;mg.beginPath();L.pts.forEach((p,i)=>i?mg.lineTo(p.x-ox,p.z-oz):mg.moveTo(p.x-ox,p.z-oz));mg.stroke()}
   for(const t of metro.trains){const p=t.L.posAt(t.s);if(Math.abs(p.x-ox)<R*1.5&&Math.abs(p.z-oz)<R*1.5){mg.fillStyle='#fff';mg.fillRect(p.x-ox-4,p.z-oz-4,8,8)}}
   const dot=(p,r,col,stroke)=>{mg.fillStyle=col;mg.beginPath();mg.arc(p.x-ox,p.z-oz,r,0,6.283);mg.fill();if(stroke){mg.strokeStyle='#111';mg.lineWidth=1.5;mg.stroke()}};
@@ -2387,8 +2754,8 @@ function drawMini(){
 
 /* ================= big map ================= */
 const bm={cx:0,cz:0,zoom:.6,off:{}};const bmap=$('bmap'),bg=bmap.getContext('2d');
-const LEGEND=[['me','你的位置','#ffffff'],['wp','導航點','#b36bff'],['story','主線任務','#ffd24a'],['mrt','捷運站','#4fb3ff'],['shop','商店','#46e0a0'],['med','醫院・警察局','#ff9aa8'],['temple','廟宇','#ff6b4a'],['market','夜市','#ffb547'],['landmark','地標','#9fe7d8'],['casino','賭場','#ffd35c'],['npc','人物','#ff8fd0'],['ubike','U-bike','#ffae2b'],['safe','安全屋','#7fb6ff']];
-const LCAT={mrt:'mrt',shop:'shop',gun:'shop',hospital:'med',police:'med',temple:'temple',market:'market',landmark:'landmark',casino:'casino',ubike:'ubike',safe:'safe'};
+const LEGEND=[['me','你的位置','#ffffff'],['wp','導航點','#b36bff'],['story','主線任務','#ffd24a'],['mrt','捷運站','#4fb3ff'],['shop','商店','#46e0a0'],['med','醫院・警察局','#ff9aa8'],['temple','廟宇','#ff6b4a'],['market','夜市','#ffb547'],['landmark','地標','#9fe7d8'],['casino','賭場','#ffd35c'],['area','郊外・新地點','#b6c97a'],['npc','人物','#ff8fd0'],['ubike','U-bike','#ffae2b'],['safe','安全屋','#7fb6ff']];
+const LCAT={mrt:'mrt',shop:'shop',gun:'shop',hospital:'med',police:'med',temple:'temple',market:'market',landmark:'landmark',casino:'casino',ubike:'ubike',safe:'safe',mall:'area',bar:'area',camp:'area',dam:'area',lake:'area',mtemple:'area',view:'area',peak:'area'};
 function openMap(){if(S.inside){toast('賭場裡看不了地圖，出去再看吧','info',1800);resume();return}releaseLock();closePhone();closeSheets();$('bigmap').hidden=false;S.paused=true;bm.cx=heroPos.x;bm.cz=heroPos.z;renderLegend();drawBigMap()}
 function closeMap(){$('bigmap').hidden=true;resume()}
 function mapCenter(){bm.cx=heroPos.x;bm.cz=heroPos.z;drawBigMap()}
@@ -2397,13 +2764,18 @@ function renderLegend(){
   $('legend').innerHTML=LEGEND.map(([k,n,col])=>`<button class="lg${bm.off[k]?' off':''}" type="button" data-k="${k}"><i style="background:${col}"></i>${n}<span>${k==='me'||k==='wp'||k==='story'?'':k==='npc'?NPCS.filter(n=>n.shown).length:(cnt[k]||0)}</span></button>`).join('');
   $('legend').querySelectorAll('.lg').forEach(b=>b.onclick=()=>{bm.off[b.dataset.k]=!bm.off[b.dataset.k];renderLegend();drawBigMap()});
 }
+const BIG_POI=new Set(['market','landmark','casino','mall','bar','camp','dam','lake','mtemple','view','peak']);
 function drawBigMap(){
   const dpr=Math.min(2,devicePixelRatio||1),W=bmap.clientWidth,H=bmap.clientHeight;if(bmap.width!==Math.round(W*dpr)){bmap.width=Math.round(W*dpr);bmap.height=Math.round(H*dpr)}
   const g=bg;g.setTransform(dpr,0,0,dpr,0,0);g.fillStyle='#10151f';g.fillRect(0,0,W,H);
   const z=bm.zoom,tx=x=>W/2+(x-bm.cx)*z,ty=y=>H/2+(y-bm.cz)*z;
   const i0=Math.floor((bm.cx-W/2/z)/CELL)-1,i1=Math.floor((bm.cx+W/2/z)/CELL)+1,j0=Math.floor((bm.cz-H/2/z)/CELL)-1,j1=Math.floor((bm.cz+H/2/z)/CELL)+1;
   g.fillStyle='#3d4458';g.fillRect(0,0,W,H);
-  for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++){const t=cellType(i,j);g.fillStyle=turf(i,j)?'#3a2838':CELL_COL[t].replace('#39415a','#262c3d');g.fillRect(tx(i*CELL+ROAD),ty(j*CELL+ROAD),(CELL-2*ROAD)*z,(CELL-2*ROAD)*z)}
+  for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++){const t=cellType(i,j);if(t==='wild'){mapLand(g,i,j,tx(i*CELL),ty(j*CELL),CELL*z,z>.5?2:1);continue}g.fillStyle=turf(i,j)?'#3a2838':CELL_COL[t].replace('#39415a','#262c3d');g.fillRect(tx(i*CELL+ROAD),ty(j*CELL+ROAD),(CELL-2*ROAD)*z,(CELL-2*ROAD)*z);
+    if(t==='park'){const pd=pondAt(i,j);if(pd){g.fillStyle='#3476b4';g.beginPath();g.arc(tx(pd.x),ty(pd.z),pd.r*z,0,6.283);g.fill()}}}
+  mapWater(g,tx,ty,z);
+  g.font='900 15px "Noto Sans TC",sans-serif';g.textAlign='center';g.fillStyle='rgba(255,255,255,.5)';
+  for(const [n,ax,az] of [['陽明山',LAND.yang.x,LAND.yang.z+110],['象山',LAND.xiang.x-40,LAND.xiang.z+70],['西郊盆地',LAND.basin.x,LAND.basin.z+150],['碧潭',LAND.lake.x,LAND.lake.z],['翡翠水庫',LAND.res.x,LAND.res.z]])g.fillText(n,tx(ax),ty(az));
   g.font='900 22px "Noto Sans TC",sans-serif';g.textAlign='center';g.fillStyle='rgba(255,255,255,.14)';
   for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++){const d=DISTRICTS[(b+1)*3+(a+1)];g.fillText(d[0],tx(a*600),ty(b*600))}
   const nt=navTarget();
@@ -2412,9 +2784,9 @@ function drawBigMap(){
     for(const t of metro.trains){const p=t.L.posAt(t.s);g.fillStyle='#fff';g.strokeStyle='#111';g.lineWidth=1.5;g.fillRect(tx(p.x)-5,ty(p.z)-5,10,10);g.strokeRect(tx(p.x)-5,ty(p.z)-5,10,10)}}
   g.textBaseline='middle';
   for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++){const p=poiAt(i,j);if(!p)continue;const c=LCAT[p.type];if(bm.off[c])continue;const m=POI_META[p.type];if(z<.45&&(c==='shop'||c==='ubike'||c==='safe'))continue;
-    const r=p.type==='landmark'?13:p.type==='market'||p.type==='temple'||p.type==='casino'?10:8;g.fillStyle=m.col;g.beginPath();g.arc(tx(p.x),ty(p.z),r,0,6.283);g.fill();g.strokeStyle='#0c0f18';g.lineWidth=2;g.stroke();
+    const big=BIG_POI.has(p.type);const r=p.type==='landmark'?13:big||p.type==='temple'?10:8;g.fillStyle=m.col;g.beginPath();g.arc(tx(p.x),ty(p.z),r,0,6.283);g.fill();g.strokeStyle='#0c0f18';g.lineWidth=2;g.stroke();
     g.fillStyle='#0c0f18';g.font=`900 ${m.ch.length>1?9:11}px "Noto Sans TC",sans-serif`;g.fillText(m.ch,tx(p.x),ty(p.z)+.5);
-    if(z>.9||p.type==='market'||p.type==='landmark'||p.type==='mrt'||p.type==='casino'){g.fillStyle='#e8ecf6';g.font='600 11px "Noto Sans TC",sans-serif';g.fillText(p.name,tx(p.x),ty(p.z)-r-8)}}
+    if(z>.9||big||p.type==='mrt'){g.fillStyle='#e8ecf6';g.font='600 11px "Noto Sans TC",sans-serif';g.fillText(p.name,tx(p.x),ty(p.z)-r-8)}}
   if(!bm.off.npc)NPCS.forEach(n=>{if(n.shown){g.fillStyle='#ff8fd0';g.beginPath();g.arc(tx(n.x),ty(n.z),8,0,6.283);g.fill();g.strokeStyle='#0c0f18';g.lineWidth=2;g.stroke();g.fillStyle='#0c0f18';g.font='900 10px "Noto Sans TC",sans-serif';g.fillText(n.quest()?'!':'人',tx(n.x),ty(n.z)+.5);if(bm.zoom>.5){g.fillStyle='#ffd6ee';g.font='600 11px "Noto Sans TC",sans-serif';g.fillText(n.name,tx(n.x),ty(n.z)-16)}}});
   if(!bm.off.story)markers().forEach(mk=>{g.fillStyle='#ffd24a';g.beginPath();g.arc(tx(mk.x),ty(mk.z),11,0,6.283);g.fill();g.fillStyle='#111';g.font='900 12px sans-serif';g.fillText('M',tx(mk.x),ty(mk.z)+.5)});
   if(nt&&!bm.off.wp){g.fillStyle=mission?'#ffc94a':'#b36bff';g.beginPath();g.moveTo(tx(nt.x),ty(nt.z));g.arc(tx(nt.x),ty(nt.z)-14,8,Math.PI*.8,Math.PI*2.2);g.closePath();g.fill()}
@@ -2465,7 +2837,7 @@ document.querySelectorAll('#segS button').forEach(b=>b.onclick=()=>{S.sens=+b.da
 $('optInv').onchange=e=>S.invY=e.target.checked;
 $('optFps').onchange=e=>$('fps').hidden=!e.target.checked;
 $('optHelp').onchange=e=>{S.showHelp=e.target.checked;$('help').hidden=!S.showHelp||IS_TOUCH};
-const TIPS=['按 M 打開地圖，點一下就能設定導航。','走到機車或汽車旁按 F 就能騎上去。','便利商店的茶葉蛋可以回血，一顆只要 13 元。','捷運有四條線，走到車站入口按 E 進站，列車每站都停。','臺北的紅綠燈有倒數秒數，車子會停下來等紅燈。','按住 Shift 衝刺；開車時空白鍵是手煞車。','騎樓是臺北人的雨天走廊，走在底下比較不會淋濕。','按 T 打開手機，可以接外送和快遞。','信義區的金虎賭場有拉霸、小鋼珠和牌桌，搭淡水信義線到「台北101/世貿」站就到。'];
+const TIPS=['按 M 打開地圖，點一下就能設定導航。','走到機車或汽車旁按 F 就能騎上去。','便利商店的茶葉蛋可以回血，一顆只要 13 元。','捷運有四條線，走到車站入口按 E 進站，列車每站都停。','臺北的紅綠燈有倒數秒數，車子會停下來等紅燈。','按住 Shift 衝刺；開車時空白鍵是手煞車。','騎樓是臺北人的雨天走廊，走在底下比較不會淋濕。','按 T 打開手機，可以接外送和快遞。','信義區的金虎賭場有拉霸、小鋼珠和牌桌，搭淡水信義線到「台北101/世貿」站就到。','城市外面有山有水：北邊陽明山、東邊象山、南邊碧潭和翡翠水庫、西邊有營區。','賣場買得到釣竿、蛙鞋和登山鞋，池塘和湖邊都可以釣魚。','斷崖很高，摔下去會受重傷；跳進水裡就沒事。'];
 $('tipText').textContent=pick(TIPS);
 
 
@@ -2507,11 +2879,11 @@ function updateNPCs(dt,now){
     n.shown=vis;n.m.g.visible=vis;if(n.lb)n.lb.visible=vis&&hyp(n,heroPos)<60;if(!vis)return;
     n.t+=dt;const d=hyp(n,heroPos);
     const face=d<8?Math.atan2(heroPos.x-n.x,heroPos.z-n.z):n.yaw;n.m.g.rotation.y+=angDiff(face,n.m.g.rotation.y)*Math.min(1,dt*5);
-    n.m.g.position.set(n.x,0,n.z);n.m.body.position.y=1.5+Math.sin(n.t*2)*.02;
+    n.y=heightAt(n.x,n.z);n.m.g.position.set(n.x,n.y,n.z);n.m.body.position.y=1.5+Math.sin(n.t*2)*.02;
     if(n.idle)n.idle(n,dt);
     const key=n.name+(n.quest()?'　！':'');
     if(key!==n.lbKey){n.lbKey=key;if(n.lb)scene.remove(n.lb);n.lb=label(key,n.quest()?'#ffd24a':'#ffd6ee',256);n.lb.scale.set(3.4,.85,1);scene.add(n.lb)}
-    n.lb.position.set(n.x,2.95,n.z);
+    n.lb.position.set(n.x,n.y+2.95,n.z);
   });
 }
 const NS=S.npc;
@@ -2642,6 +3014,236 @@ function chatPed(p){
   say('路人',pick(pool),3);
   if(Math.random()<.05&&!NS.pedGift){NS.pedGift=1;setTimeout(()=>{say('路人','……對了，這個我用不到，給你吧。',2.6);S.ammo+=12;renderWeapon();toast('路人給了你 12 發子彈','good')},3000)}
 }
+
+
+/* ================= new places: shops, people and jobs ================= */
+function gear(k){S.items[k]=1}
+Object.assign(SHOPS,{
+  mall:[{id:'m_bento',name:'家庭號便當',desc:'生命全滿',price:70,mall:1,fx:()=>heal(999)},
+    {id:'m_drink',name:'能量飲料六入',desc:'體力全滿，3 分鐘內衝刺不耗體力',price:120,mall:1,fx:()=>{S.st=S.maxSt;S.boost=180}},
+    {id:'boots',name:'登山鞋',desc:'爬得上更陡的坡，摔落傷害減半',price:1200,mall:1,own:()=>S.items.boots,fx:()=>gear('boots')},
+    {id:'fins',name:'蛙鞋',desc:'游泳速度加倍',price:600,mall:1,own:()=>S.items.fins,fx:()=>gear('fins')},
+    {id:'rod',name:'釣竿',desc:'可以在公園池塘、碧潭和水庫邊釣魚',price:500,mall:1,own:()=>S.items.rod,fx:()=>gear('rod')}],
+  bar:[{id:'beer',name:'臺灣啤酒',desc:'回復 15 點生命，體力全滿',price:60,fx:()=>{heal(15);S.st=S.maxSt}},
+    {id:'peanut',name:'炒花生',desc:'回復 30 點生命',price:40,fx:()=>heal(30)},
+    {id:'cocktail',name:'調酒「臺北之夜」',desc:'90 秒內衝刺不耗體力',price:150,fx:()=>{S.st=S.maxSt;S.boost=Math.max(S.boost||0,90)}},
+    {id:'whisky',name:'威士忌',desc:'2 分鐘內攻擊力 ×1.3',price:220,fx:()=>{S.atkBuff=performance.now()+120000}}],
+  camp:[{id:'ration',name:'軍用口糧',desc:'回復 50 點生命',price:40,fx:()=>heal(50)},
+    {id:'c_ammo',name:'子彈 ×24',desc:'手槍用，比武器行便宜',price:220,gun:1,fx:()=>{S.ammo+=24;renderWeapon()}},
+    {id:'canteen',name:'水壺',desc:'體力上限 +30',price:400,own:()=>S.items.canteen,fx:()=>{gear('canteen');S.maxSt+=30;S.st=S.maxSt}},
+    {id:'vest',name:'防彈背心',desc:'受到的傷害減少三成',price:2500,own:()=>S.items.vest,fx:()=>gear('vest')}],
+  tackle:[{id:'rod',name:'釣竿',desc:'可以在公園池塘、碧潭和水庫邊釣魚',price:500,own:()=>S.items.rod,fx:()=>gear('rod')},
+    {id:'grill',name:'烤魚',desc:'回復 60 點生命',price:60,fx:()=>heal(60)},
+    {id:'fins',name:'蛙鞋',desc:'游泳速度加倍',price:650,own:()=>S.items.fins,fx:()=>gear('fins')}],
+  monk:[{id:'veg',name:'素齋便當',desc:'回復 60 點生命',price:50,fx:()=>heal(60)},
+    {id:'tea',name:'平安茶',desc:'體力全滿',price:30,fx:()=>{S.st=S.maxSt}},
+    {id:'amulet2',name:'平安符',desc:'生命歸零時自動回復一次，用過就碎',price:800,own:()=>S.items.amulet,fx:()=>gear('amulet')}],
+});
+function shopAt(type,name){endTalk();openShop({type,name})}
+const nearestOpen=list=>{let b=null,bd=1e9;for(const v of list)if(!v.done){const d=hyp(v,heroPos);if(d<bd){bd=d;b=v}}return b};
+
+/* ---------- fishing ---------- */
+const FISH={pond:[['吳郭魚',50,.45],['鯽魚',70,.3],['錦鯉',160,.1],['破雨鞋',0,.15]],
+  lake:[['吳郭魚',60,.35],['鯉魚',120,.3],['鱸魚',200,.2],['香魚',320,.08],['破雨鞋',0,.07]],
+  res:[['鯉魚',140,.3],['鱸魚',220,.3],['草魚',300,.22],['大鯉魚王',900,.06],['漂流木',0,.12]]};
+function fishSpot(){
+  if(S.swim||S.veh)return null;const x=heroPos.x,z=heroPos.z;
+  if(inCity(x,z)){const pd=pondAt(Math.floor(x/CELL),Math.floor(z/CELL));return pd&&Math.hypot(x-pd.x,z-pd.z)<pd.r+3.2?{kind:'pond',name:'公園池塘'}:null}
+  const tp=SITE.temple.pond;if(Math.hypot(x-tp.x,z-tp.z)<9.6)return {kind:'temple',name:'放生池'};
+  const w=WATERS.find(w=>Math.hypot(x-w.x,z-w.z)<w.r+6);if(!w)return null;
+  for(let k=0;k<8;k++){const a=k*.785;if(waterDepth(x+Math.cos(a)*5,z+Math.sin(a)*5)>.1)return {kind:w.name==='翡翠水庫'?'res':'lake',name:w.name}}
+  return null;
+}
+function startFishing(sp){
+  if(S.fish)return;
+  if(sp.kind==='temple'){sayNow('法師 慧明','施主，放生池的魚不能釣。阿彌陀佛。',3);return}
+  if(!S.items.rod){toast('需要釣竿：好市集量販或碧潭的阿海有賣','info',2800);return}
+  S.fish={t:3+Math.random()*4.5,sp,x:heroPos.x,z:heroPos.z};sayNow('',`在${sp.name}甩竿……站著別動，等魚上鉤`,2.8);
+}
+function updateFishing(dt){
+  const f=S.fish;if(!f)return;
+  if(Math.hypot(heroPos.x-f.x,heroPos.z-f.z)>1.2||S.veh||S.dead){S.fish=null;toast('收竿了','info',1200);return}
+  f.t-=dt;if(f.t>0)return;S.fish=null;
+  const tb=FISH[f.sp.kind];let r=Math.random(),it=tb[0];for(const q of tb){r-=q[2];if(r<=0){it=q;break}}
+  const v=Math.round(it[1]*(f.sp.kind==='res'&&NS.resPermit?1.5:1));
+  if(v){S.fishN=(S.fishN||0)+1;S.fishV=(S.fishV||0)+v;toast(`釣到 ${it[0]}！值 NT$${v}，可以拿去碧潭賣給阿海`,'good',3200)}else toast(`釣到……${it[0]}。`,'info',2200);
+}
+function ringBell(){sayNow('','噹——　鐘聲在山谷裡迴盪',2.6);S.st=S.maxSt;if(!NS.bellT||S.clock-NS.bellT>60){NS.bellT=S.clock;heal(25);toast('心情平靜下來，回復 25 點生命','good',2200)}}
+/* things to do with E that are not a person or a shop */
+function extraAction(){
+  const b=SITE.temple.bell;if(Math.hypot(heroPos.x-b.x,heroPos.z-b.z)<3.6)return {label:'敲鐘',fn:ringBell};
+  if(S.fish)return null;const sp=fishSpot();
+  return sp?{label:S.items.rod||sp.kind==='temple'?'釣魚・'+sp.name:'釣魚（要釣竿）',fn:()=>startFishing(sp)}:null;
+}
+const capOn=(m,col)=>{const c=new THREE.Mesh(CG(.3,.32,.16,10),M(col));c.position.y=2.55;m.g.add(c)};
+
+/* ---------- 西郊營區 ---------- */
+for(const [x,z] of SITE.camp.jeeps){const v=addVehicle('car',x,z,Math.PI/2,null,car(0x56663a,null).g);v.keep=true;v.jeep=true;v.owned=true}
+makeNPC({id:'sarge',name:'班長 鐵雄',shirt:0x4b5a3a,pants:0x3e4a2c,hair:0x111111,skin:0xc68b62,at:()=>SITE.camp.sergeant,yaw:Math.PI/2,extra:m=>capOn(m,0x3e4a2c),
+  quest:()=>!NS.drillDone&&!mission,
+  talk(n){
+    const opts=[['聊聊',()=>reply([pick(['這個盆地四面都是山，只有東邊一個缺口，易守難攻。','吉普車爬坡比一般車厲害，想上山可以開它。','體力不夠？福利社有賣水壺。','當兵的時候，我一天跑三趟陽明山。'])])]];
+    if(!mission)opts.unshift([NS.drillDone?'再跑一次（獎金 NT$300）':'我要挑戰障礙訓練',()=>reply(['好！六個點照順序跑，六十秒內跑完。','不准開車，用你的兩條腿！'],[['開始！',()=>{endTalk();drillQuest()}],['再想想',endTalk]])]);
+    dialog(n,[NS.drillDone?'又是你。腿還行嗎？':'站好！……喔，是來參觀的老百姓。想不想試試我們的障礙訓練？'],opts);
+  }});
+function drillQuest(){
+  const cps=SITE.camp.cp;let i=0;
+  beginMission({id:'drill',title:'障礙訓練',sub:'60 秒內跑完六個點',deadline:performance.now()+60000,
+    get target(){return {x:cps[i][0],z:cps[i][1],name:'第 '+(i+1)+' 站'}},
+    text(){return `跑到 <b>第 ${i+1} 站</b>（${i}/6）`},
+    update(){
+      if(S.veh){failMission('訓練不能開車！');return}
+      if(hyp(this.target,heroPos)<3.2){i++;
+        if(i>=6){const first=!NS.drillDone;NS.drillDone=1;completeMission(first?800:300,'結訓！');if(first)setTimeout(()=>{giveItem('camo','迷彩背心','生命上限 +40');S.maxHp+=40;S.hp=S.maxHp},1500)}
+        else say('班長',pick(['快！快！快！','不要停！','再快一點！','腿抬高！']),1.2)}
+      else if(performance.now()>this.deadline)failMission('時間到，班長搖了搖頭')}});
+  say('班長','預備——跑！',1.6);
+}
+makeNPC({id:'supply',name:'補給士 小吳',shirt:0x5a6a3c,pants:0x3e4a2c,hair:0x2b1f18,at:()=>SITE.camp.supply,yaw:0,extra:m=>capOn(m,0x3e4a2c),
+  quest:()=>!NS.supplyDone&&!mission,
+  talk(n){
+    const opts=[['看看福利社',()=>shopAt('camp','營區福利社')]];
+    if(!mission)opts.push(['有需要幫忙嗎？',()=>reply(['水庫管理站訂的補給品到了，可是我走不開。','六分鐘內送到翡翠水庫的壩頂，給你一千五。門口的吉普車可以開。'],[['我去送',()=>{endTalk();supplyQuest()}],['太遠了',endTalk]])]);
+    dialog(n,['歡迎光臨營區福利社！口糧、水壺、背心、子彈都有。'],opts);
+  }});
+function supplyQuest(){
+  const t={x:SITE.dam.top.x,z:SITE.dam.top.z,name:'翡翠水庫壩頂'};
+  beginMission({id:'supply',title:'補給急送',sub:'六分鐘內送到水庫',deadline:performance.now()+360000,
+    get target(){return t},text(){return `把補給品送到 <b>翡翠水庫壩頂</b>・${fmt(hyp(t,heroPos))} m`},
+    update(){if(hyp(t,heroPos)<(S.veh?8:5)){const first=!NS.supplyDone;NS.supplyDone=1;completeMission(first?1500:800,'補給品準時送達');setTimeout(()=>say('老周','喔！營區的補給到了，辛苦你跑這一趟。',3),1500)}
+      else if(performance.now()>this.deadline)failMission('太慢了，水庫那邊打電話來催')}});
+  say('小吳','水庫在城市的東南邊，穿過市區往南開，看到土路就上去。',4);
+}
+makeNPC({id:'guard',name:'衛兵',shirt:0x4b5a3a,pants:0x3e4a2c,hair:0x111111,at:()=>SITE.camp.guard,yaw:Math.PI/2,extra:m=>capOn(m,0x3e4a2c),
+  talk(n){dialog(n,[pick(['今天是營區開放日，請進。不要亂碰裝備。','吉普車可以借你開，記得開回來……算了，沒人在點名。','班長的障礙訓練很操，上次有人跑到吐。','福利社的口糧意外地好吃。'])])}});
+
+/* ---------- 翡翠水庫 ---------- */
+makeNPC({id:'keeper',name:'管理員 老周',shirt:0x2f6fb0,pants:0x3a3f52,hair:0x8a8a8a,at:()=>SITE.dam.keeper,yaw:Math.PI,extra:m=>capOn(m,0xf2c14e),
+  quest:()=>!NS.valveDone&&!mission,
+  talk(n){
+    const opts=[['聊聊',()=>reply([pick(['整個臺北喝的水都從這裡來，所以不能亂丟垃圾。','壩頂這一圈走完大概七百公尺，我每天走三趟。','水庫的魚很肥，不過沒有我點頭不准釣。','看到湖中間那座塔沒有？那是取水塔。'])])]];
+    if(!mission)opts.unshift([NS.valveDone?'再巡一次水閘（NT$400）':'有需要幫忙嗎？',()=>reply(['今天輪到巡檢水閘，可是我膝蓋不行了。','壩頂步道上有三個紅色的水閘，三分鐘內幫我各看一眼。'],[['交給我',()=>{endTalk();valveQuest()}],['下次吧',endTalk]])]);
+    dialog(n,[NS.valveDone?'年輕人，又來看水啊？':'這裡是翡翠水庫。風景不錯吧？'],opts);
+  }});
+function valveQuest(){
+  const vs=SITE.dam.valves.map(v=>({x:v.x,z:v.z,done:false}));
+  beginMission({id:'valves',title:'巡檢水閘',sub:'三分鐘內檢查三個水閘',deadline:performance.now()+180000,
+    get target(){const v=nearestOpen(vs);return v?{x:v.x,z:v.z,name:'水閘'}:{x:SITE.dam.top.x,z:SITE.dam.top.z,name:'壩頂'}},
+    text(){return `沿著壩頂步道檢查 <b>紅色水閘</b>（${vs.filter(v=>v.done).length}/3）`},
+    update(){
+      for(const v of vs)if(!v.done&&hyp(v,heroPos)<(S.veh?5:3.4)){v.done=true;say('',pick(['水閘運作正常，打勾。','壓力正常，下一個。','這個有點鬆，鎖緊了。']),1.8)}
+      if(vs.every(v=>v.done)){const first=!NS.valveDone;NS.valveDone=1;NS.resPermit=1;completeMission(first?900:400,'三個水閘都檢查完了');if(first)setTimeout(()=>say('老周','辛苦了！以後你在水庫釣魚，我睜一隻眼閉一隻眼。這裡的魚特別肥。',4.2),1500)}
+      else if(performance.now()>this.deadline)failMission('超過時間，老周自己去檢查了')}});
+}
+
+/* ---------- 碧潭 ---------- */
+makeNPC({id:'hai',name:'釣具行 阿海',shirt:0x1b998b,pants:0x5a4a3a,hair:0x2b1f18,skin:0xc68b62,at:()=>SITE.lake.hai,yaw:Math.PI,
+  extra:m=>{const h=new THREE.Mesh(CG(.48,.52,.1,12),M(0xe7d6b0));h.position.y=2.58;m.g.add(h)},
+  quest:()=>(S.fishN||0)>0,
+  talk(n){
+    const opts=[['看看釣具',()=>shopAt('tackle','阿海釣具行')],['哪裡好釣？',()=>reply(['公園池塘都是小魚，碧潭的鱸魚不錯。','水庫的魚最大，不過要先跟管理員老周打好關係。','禪寺的放生池？……你敢釣，法師會唸你三天。'])]];
+    if(S.fishN)opts.unshift([`賣魚（${S.fishN} 條・NT$${fmt(S.fishV)}）`,()=>{const v=S.fishV;S.fishN=0;S.fishV=0;S.cash+=v;renderMoney();reply([`秤一下……算你 NT$${fmt(v)}。下次再來！`])}]);
+    dialog(n,[S.items.rod?'今天釣況如何？釣到的魚我都收。':'來碧潭不釣魚太可惜了，買支釣竿吧。'],opts);
+  }});
+
+/* ---------- 象山觀景台 ---------- */
+makeNPC({id:'photo',name:'攝影師 小安',shirt:0xe8862f,pants:0x2b3148,hair:0x3a2a1e,at:()=>SITE.view.photo,yaw:Math.PI/2,
+  extra:m=>{const c=new THREE.Mesh(BG(.34,.24,.2),M(0x1d1f26));c.position.set(0,1.75,.32);m.g.add(c);const l=new THREE.Mesh(CG(.09,.11,.16,8),M(0x3a3f52));l.rotation.x=Math.PI/2;l.position.set(0,1.75,.48);m.g.add(l)},
+  quest:()=>!NS.viewsDone&&!mission,
+  talk(n){
+    const opts=[['聊聊',()=>reply([pick(['從這裡拍 101 最漂亮，尤其是傍晚。','欄杆外面就是斷崖，三十幾公尺高，不要靠太近。','我想出一本攝影集，叫《臺北的邊緣》。','雨天上山要小心，坡很滑。'])])]];
+    if(!NS.viewsDone&&!mission)opts.unshift(['你在拍什麼？',()=>reply(['我在拍一本攝影集，象山這裡拍完了。','還有三個地方一直沒空去：翡翠水庫壩頂、竹林禪寺、陽明山頂。','你幫我去這三個地方各看一眼，回來告訴我值不值得拍，我付你兩千五。'],[['好，我去',()=>{endTalk();viewsQuest(n)}],['太遠了',endTalk]])]);
+    dialog(n,[NS.viewsDone?'託你的福，攝影集快完成了！':'噓……等一下，光線剛好。……好了。你也是來看風景的？'],opts);
+  }});
+function viewsQuest(n){
+  const sp=[{x:SITE.dam.top.x,z:SITE.dam.top.z,name:'翡翠水庫壩頂',done:false},{x:SITE.temple.x,z:SITE.temple.z+22,name:'竹林禪寺',done:false},{x:LAND.yang.x,z:LAND.yang.z,name:'陽明山頂',done:false}];
+  beginMission({id:'views',title:'臺北的邊緣',sub:'走訪三個地方，再回象山',
+    get target(){const v=nearestOpen(sp);return v||{x:n.x,z:n.z,name:'攝影師 小安'}},
+    text(){const v=nearestOpen(sp),k=sp.filter(s=>s.done).length;return v?`前往 <b>${v.name}</b>（${k}/3）・${fmt(hyp(v,heroPos))} m`:`回象山觀景台找 <b>小安</b>・${fmt(hyp(n,heroPos))} m`},
+    update(){
+      for(const s of sp)if(!s.done&&hyp(s,heroPos)<(S.veh?10:7)){s.done=true;bigMsg(s.name,'到此一遊',false,2200)}
+      if(sp.every(s=>s.done)&&hyp(n,heroPos)<4){NS.viewsDone=1;completeMission(2500,'三個地方都去過了');setTimeout(()=>say('小安','太好了！照你說的，我下禮拜就出發。',3),1500)}}});
+  say('小安','慢慢來，不趕時間。陽明山頂很陡，車開不上去，要用走的。',4);
+}
+
+/* ---------- 竹林禪寺 ---------- */
+let cairns=null;
+makeNPC({id:'monk',name:'法師 慧明',shirt:0xc9861a,pants:0x8a5a14,hair:0xd9a57f,at:()=>SITE.temple.monk,yaw:Math.PI/2,
+  quest:()=>!NS.stoneDone&&!mission,
+  talk(n){
+    const opts=[['請一份素齋',()=>shopAt('monk','竹林禪寺・香積廚')],['聊聊',()=>reply([pick(['鐘樓的鐘可以敲，敲一下，煩惱少一點。','放生池的魚請不要釣，牠們也在修行。','山頂風大，施主上去記得多穿一件。','心靜了，路自然就好走。'])])]];
+    if(!NS.stoneDone&&!mission)opts.push(['有需要幫忙嗎？',()=>reply(['山上有三座祈福石堆，每年這時候要把祈福牌請回寺裡。','貧僧年紀大了，爬不動。施主願意代勞嗎？','兩座在半山腰，一座在山頂附近。'],[['願意',()=>{endTalk();stoneQuest()}],['改天吧',endTalk]])]);
+    dialog(n,[NS.stoneDone?'施主，念珠戴著還習慣嗎？':'阿彌陀佛。施主遠道而來，喝杯茶吧。'],opts);
+  }});
+function stoneQuest(){
+  if(cairns)cairns.forEach(c=>scene.remove(c.g));
+  cairns=SITE.temple.stones.map(p=>{const g=new THREE.Group();[.9,.65,.42].forEach((s,i)=>{const m=new THREE.Mesh(icoG,M(0xb9b4a8));m.scale.set(s,s*.55,s);m.position.y=.3+i*.52;g.add(m)});
+    const f=new THREE.Mesh(BG(.5,.7,.06),BM(0xd7263d));f.position.set(0,2.1,0);g.add(f);g.position.set(p.x,heightAt(p.x,p.z),p.z);scene.add(g);return {x:p.x,z:p.z,g,done:false}});
+  const list=cairns;
+  beginMission({id:'stones',title:'山中祈福',sub:'請回三塊祈福牌',
+    get target(){const c=nearestOpen(list);return c?{x:c.x,z:c.z,name:'祈福石堆'}:{x:SITE.temple.x,z:SITE.temple.z,name:'竹林禪寺'}},
+    text(){const c=nearestOpen(list);return `找到 <b>祈福石堆</b>（${list.filter(c=>c.done).length}/3）${c?'・'+fmt(hyp(c,heroPos))+' m':''}`},
+    update(){
+      for(const c of list)if(!c.done&&hyp(c,heroPos)<3.4){c.done=true;scene.remove(c.g);say('','（你雙手合十，把祈福牌小心收好）',2.4)}
+      if(list.every(c=>c.done)){cairns=null;NS.stoneDone=1;completeMission(500,'三塊祈福牌都請回來了');setTimeout(()=>{giveItem('beads','靜心念珠','自動回血速度加倍');S.regen*=2},1500)}}});
+  say('法師','兩座在寺院兩側的山腰，一座在山頂下面。慢慢走，不急。',4);
+}
+
+/* ---------- 好市集量販 ---------- */
+const MALL0=poiAt(4,3),BAR0=poiAt(10,-1);
+makeNPC({id:'clerk',name:'店員 小芳',shirt:0x1f6fd6,pants:0x23283a,hair:0x2b1f18,at:()=>({x:MALL0.x+9,z:MALL0.z+8.8}),yaw:Math.PI,
+  talk(n){dialog(n,[pick(['歡迎光臨好市集！今天登山鞋有現貨喔。','要去郊外嗎？釣竿、蛙鞋、登山鞋我們都有。','會員……啊，我們沒有會員制，直接買就好。'])],[['我要買東西',()=>shopAt('mall','好市集量販')]])}});
+let carts=null;
+makeNPC({id:'auntie',name:'試吃阿姨',shirt:0xf2a0b0,pants:0x3a3f52,hair:0x6b4a2e,at:()=>({x:MALL0.x-10,z:MALL0.z+7.6}),yaw:Math.PI,
+  extra:m=>{const ap=new THREE.Mesh(BG(.82,.9,.05),M(0xf2f2f2));ap.position.set(0,1.25,.25);m.g.add(ap)},
+  quest:()=>!NS.cartDone&&!mission,
+  talk(n){
+    if(mission&&mission.id==='carts'&&mission.ready)return finishCarts(n);
+    const opts=[['試吃一口',()=>{if(NS.sampleT&&S.clock-NS.sampleT<60){reply(['剛剛才吃過，等一下再來啦，後面還有人排隊。']);return}NS.sampleT=S.clock;heal(15);reply([pick(['來，剛煎好的水餃，小心燙。','這個是新口味的泡麵，試試看。','德國香腸切片，一人一塊喔。']),'（回復 15 點生命）'])}]];
+    if(!NS.cartDone&&!mission)opts.push(['有需要幫忙嗎？',()=>reply(['唉，客人把購物車推到外面就不推回來。','附近的騎樓下有四台，幫阿姨找回來好不好？','找齊了阿姨給你折價券。'],[['我去找',()=>{endTalk();cartQuest(n)}],['等等再說',endTalk]])]);
+    dialog(n,[NS.cartDone?'少年仔，折價券記得用喔！':'來來來，試吃不用錢！'],opts);
+  }});
+function cartQuest(n){
+  if(carts)carts.forEach(c=>scene.remove(c.g));
+  carts=[0,1,2,3].map(()=>{const p=randomDoor(n,40,150);const g=new THREE.Group();const b=new THREE.Mesh(BG(.7,.6,1.1),M(0xc9ccd2));b.position.y=.75;const h=new THREE.Mesh(BG(.7,.08,.08),M(0x1f6fd6));h.position.set(0,1.15,-.6);g.add(b,h);g.position.set(p.x,0,p.z);g.rotation.y=Math.random()*6;scene.add(g);return {x:p.x,z:p.z,g,done:false}});
+  const list=carts;
+  beginMission({id:'carts',title:'流浪的購物車',sub:'找回四台購物車',ready:false,
+    get target(){const c=nearestOpen(list);return c?{x:c.x,z:c.z,name:'購物車'}:{x:n.x,z:n.z,name:'試吃阿姨'}},
+    text(){const c=nearestOpen(list);return c?`找回 <b>購物車</b>（${list.filter(c=>c.done).length}/4）・${fmt(hyp(c,heroPos))} m`:'把購物車推回去找 <b>試吃阿姨</b>'},
+    update(){
+      for(const c of list)if(!c.done&&hyp(c,heroPos)<(S.veh?4:2.8)){c.done=true;scene.remove(c.g);say('',pick(['找到一台！輪子還會歪一邊。','這台被拿來放盆栽了……','裡面還有一袋沒拿走的衛生紙。']),2)}
+      if(list.every(c=>c.done)){this.ready=true;if(hyp(n,heroPos)<3.4)finishCarts(n)}}});
+}
+function finishCarts(n){
+  if(!mission||mission.id!=='carts')return;carts=null;NS.cartDone=1;completeMission(500,'四台購物車都回家了');
+  dialog(n,['哎唷，四台都找回來了！少年仔真勤勞。','這張折價券給你，以後來好市集買東西再打八折。'],[['謝謝阿姨',()=>{endTalk();giveItem('coupon','賣場折價券','好市集量販的東西再打八折')}]]);
+}
+
+/* ---------- 夜貓酒吧 ---------- */
+makeNPC({id:'ken',name:'調酒師 阿Ken',shirt:0x1d1f26,pants:0x1d1f26,hair:0x111111,at:()=>({x:BAR0.x,z:BAR0.z+27.5}),yaw:Math.PI,
+  idle:n=>{n.m.armR.rotation.x=-1.1+Math.sin(n.t*11)*.35;n.m.armL.rotation.x=-1.1-Math.sin(n.t*11)*.35},
+  talk(n){dialog(n,[pick(['今晚想喝點什麼？','心情不好喝啤酒，心情好喝調酒，要打架喝威士忌。','「臺北之夜」是我的招牌，喝了會想跑步。'])],[['看酒單',()=>shopAt('bar','夜貓酒吧')]])}});
+makeNPC({id:'mei',name:'老闆娘 Mei 姐',shirt:0xc8323c,pants:0x1d1f2a,hair:0x3a2a1e,at:()=>({x:BAR0.x+11.5,z:BAR0.z+22}),yaw:Math.PI,
+  quest:()=>!NS.brawlDone&&!mission,
+  talk(n){
+    const opts=[['聊聊',()=>reply([pick(['這間店我開了十五年，什麼人都見過。','紅蠍幫的人常來白吃白喝，煩死了。','阿Ken 的調酒是全臺北最好的，不接受反駁。','你要是在賭場贏了錢，記得來這裡花掉。'])])]];
+    if(!mission)opts.unshift([NS.brawlDone?'今晚還有人鬧事嗎？':'有需要幫忙嗎？',()=>reply(['你來得正好。那邊三個喝醉的又在摔杯子。','幫我把他們請出去，用什麼方法都行。酬勞一千二。'],[['交給我',()=>{endTalk();brawlQuest(n)}],['我只是來喝酒的',endTalk]])]);
+    dialog(n,[NS.brawlDone?'喔，我們的保鑣來了。今天喝什麼？':'歡迎光臨夜貓。第一次來？'],opts);
+  }});
+function brawlQuest(n){
+  const es=[0,1,2].map(k=>{const e=spawnEnemy(n.x-14+k*5,n.z-9-(k%2)*4,'melee');e.alert=true;e.aggro=70;return e});
+  panicPeds(n,40);
+  beginMission({id:'brawl',title:'鬧事的客人',sub:'把三個鬧事的請出去',
+    get target(){const e=es.find(e=>!e.dead);return e?{x:e.x,z:e.z,name:'鬧事的客人'}:{x:n.x,z:n.z,name:'夜貓酒吧'}},
+    text(){return `擺平 <b>鬧事的客人</b>（${es.filter(e=>e.dead).length}/3）`},
+    update(){
+      if(es.every(e=>e.dead)){NS.brawlDone=(NS.brawlDone||0)+1;completeMission(1200,'酒吧恢復平靜');S.st=S.maxSt;S.boost=Math.max(S.boost||0,90);setTimeout(()=>say('Mei 姐','謝啦！這杯「臺北之夜」算我的。',3),1500)}
+      else if(hyp(n,heroPos)>140)failMission('你跑太遠了，店被砸了')}});
+  say('鬧事的客人','看什麼看！想打架是不是！',2.4);
+}
+makeNPC({id:'drunk',name:'醉漢',shirt:0x9aa1ac,pants:0x5a4a3a,hair:0x2b1f18,at:()=>({x:BAR0.x-12.5,z:BAR0.z+17.5}),yaw:1,
+  idle:n=>{n.m.g.rotation.z=Math.sin(n.t*1.3)*.12},
+  talk(n){dialog(n,[pick(['嗝……你知道嗎，公園那個阿伯的謎題，答案是……是「水」啦！嗝。','我以前……是陽明山腳下最會釣魚的人……','老闆娘！再一杯！……什麼？我已經喝八杯了？','西邊那個盆地……有阿兵哥在裡面跑步……我親眼看到的……','象山那個斷崖，嗝，不要靠太近……我的帽子就是這樣沒的。'])])}});
 
 
 /* ================= casino: rules & maths (no DOM in this part) ================= */
@@ -3617,7 +4219,7 @@ function renderApp(){
   }
   else if(app==='bag'){
     const W=S.owned.map(id=>{const w=WEAPONS[id];return `<div class="cell"><div class="mc"><b>${w.name}${w.rare?' <span style="color:#ffd34d;font-size:12px">稀有</span>':''}</b><div class="sub">${w.kind==='gun'?'槍械・傷害 '+w.dmg:w.kind==='throw'?'投擲・無限使用':'近戰・傷害 '+w.dmg}</div></div>${S.weapon===id?'<span class="green">使用中</span>':`<button class="pbtn sm" type="button" data-w="${id}">裝備</button>`}</div>`}).join('');
-    const ITEMS={amulet:['平安符','生命歸零時自動回復一次'],pass:['捷運月票','搭捷運免費'],vip:['夜市 VIP 卡','商店八折']};
+    const ITEMS={amulet:['平安符','生命歸零時自動回復一次'],pass:['捷運月票','搭捷運免費'],vip:['夜市 VIP 卡','商店八折'],boots:['登山鞋','爬得上更陡的坡，摔落傷害減半'],fins:['蛙鞋','游泳速度加倍'],rod:['釣竿',`可以在水邊釣魚${S.fishN?'・魚簍裡有 '+S.fishN+' 條（值 NT$'+fmt(S.fishV)+'）':''}`],vest:['防彈背心','受到的傷害減少三成'],canteen:['水壺','體力上限 +30'],camo:['迷彩背心','生命上限 +40'],beads:['靜心念珠','自動回血速度加倍'],coupon:['賣場折價券','好市集量販再打八折']};
     const I=Object.keys(ITEMS).filter(k=>S.items[k]).map(k=>`<div class="cell"><div class="mc"><b>${ITEMS[k][0]}</b><div class="sub">${ITEMS[k][1]}</div></div></div>`).join('')||'<div class="cell"><span class="mut">還沒有特殊道具</span></div>';
     const hints=[];if(!S.owned.includes('slipper'))hints.push('早餐店的阿嬤好像很喜歡跟人聊天');if(!S.owned.includes('guitar'))hints.push('路口的街頭藝人收到夠多打賞會很感動');if(!S.items.amulet)hints.push('廟公好像在找什麼東西');if(!S.items.pass)hints.push('捷運站務員在辦知識問答');if(!S.items.vip)hints.push('夜市雞排攤很缺人手');if(!S.owned.includes('goldgun'))hints.push('聽說半夜的公園有個怪阿伯');
     pView.innerHTML=nav('背包')+`<h3 class="sec">武器（子彈 ${S.ammo}）</h3><div class="grp">${W}</div><h3 class="sec">特殊道具</h3><div class="grp">${I}</div>`+(hints.length?`<h3 class="sec">傳聞</h3><div class="grp">${hints.map(h=>`<div class="cell"><span class="sub">${h}</span></div>`).join('')}</div>`:'');
@@ -3686,6 +4288,7 @@ function phoneTick(now){
   if(app==='mission'&&mission&&$('pmStatus'))$('pmStatus').textContent=mission.text().replace(/<[^>]+>/g,'');
 }
 addMail('阿彬','歡迎回臺北！','好久不見！我在夜市等你。\n\n手機的「任務」可以看進度，地圖按 M 也能打開。便利商店的茶葉蛋可以回血，別餓著了。',true);
+addMail('臺北市觀光局','走出市區看看','市區外面的步道開放了，從市區邊緣順著土路走就到：\n\n・北邊：陽明山，半山腰有竹林禪寺，可以敲鐘、吃素齋\n・東邊：象山觀景台，小心斷崖\n・南邊：碧潭可以釣魚，再往東是翡翠水庫\n・西邊：盆地裡的西郊營區今天開放參觀\n\n市區裡也多了好市集量販和夜貓酒吧，公園有些有池塘和小山丘。出門前可以先到賣場買登山鞋、蛙鞋和釣竿。',true);
 addMail('金虎賭場','盛大開幕','信義區的金虎賭場開幕了！拉霸、小鋼珠、21 點、比大小、德州撲克、骰寶通通有，場內還有其他客人陪你一起玩。\n\n地點在臺北101 東北邊，搭淡水信義線到「台北101/世貿」站，出站往東走一個路口就到。到服務台可以領每日禮金 NT$300。\n\n（場內使用遊戲裡的現金。）',true);
 addMail('臺北捷運','捷運通車了','淡水信義線、板南線、松山新店線、文湖線已經通車，列車在高架軌道上行駛，每站都停。\n\n走到車站入口按 E 選路線進站（NT$20），列車停靠時上車，到站再下車。轉乘站可以出站後換另一條線。',true);
 addMail('系統','關於 GPS 步行模式','夜行步城預設是自由操控。想體驗原本的 GPS 步行玩法，可以在選單的「GPS 系統面板」開啟：角色會跟著（模擬）GPS 位置移動，並有防飛人檢查。',true);
@@ -3749,11 +4352,12 @@ function frame(now){
     if(S.boost>0){S.boost-=dt;S.st=S.maxSt}
     updateLights(dt);
     if(S.mode==='gps')gpsStep(dt,ix,iy);
-    updateMetro(dt);
+    S.far=cityDist(heroPos.x,heroPos.z)>140;
+    updateMetro(dt);updateFishing(dt);
     if(S.ride){updateRide(dt);jumpQ=false}
-    else if(S.veh){driveVehicle(S.veh,dt,iy,ix,keys[' ']||S.hbTouch);heroPos.x=S.veh.x;heroPos.z=S.veh.z;placeRider();updateSpeedo();jumpQ=false}
+    else if(S.veh){driveVehicle(S.veh,dt,iy,ix,keys[' ']||S.hbTouch);heroPos.x=S.veh.x;heroPos.z=S.veh.z;heroPos.y=S.veh.y;placeRider();updateSpeedo();jumpQ=false}
     else if(!S.dead){
-      if(S.mode==='gps'){const spd=followEst(dt);poseHero(dt,spd,false)}
+      if(S.mode==='gps'){const spd=followEst(dt);heroPos.y=heightAt(heroPos.x,heroPos.z);poseHero(dt,spd,false)}
       else{const r=moveHeroFree(dt,ix,iy,sprint);poseHero(dt,r.spd,r.run)}
     }
     if(S.reload>0){S.reload-=dt;if(S.reload<=0){const n=Math.min((WEAPONS[S.weapon].mag||12)-S.mag,S.ammo);S.mag+=n;S.ammo-=n;renderWeapon()}}
